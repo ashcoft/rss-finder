@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      fast-xml-parser:
+        specifier: 5.2.5
+        version: 5.2.5
       feedfinder-ts:
         specifier: ^1.0.3
         version: 1.0.3

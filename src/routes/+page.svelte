@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { normalizeUrl } from '$lib/utils.js';
+	import { normalizeUrl, encodeFeedUrl } from '$lib/utils.js';
 
 	let urlInput = $state('');
 	let isLoading = $state(false);
@@ -72,6 +72,10 @@
 
 	function openInNewTab(url: string) {
 		window.open(url, '_blank');
+	}
+
+	function openPreview(url: string) {
+		window.open(`/preview/${encodeFeedUrl(url)}`, '_blank');
 	}
 
 	async function copyToClipboard(url: string) {
@@ -234,7 +238,14 @@
 								<h3 class="mb-1 text-sm font-medium sm:text-base">{title}</h3>
 								<div class="text-xs break-all text-muted-foreground sm:text-sm">{url}</div>
 							</div>
-							<div class="flex gap-2 self-start sm:self-center">
+							<div class="flex flex-wrap gap-2 self-start sm:self-center">
+								<button
+									class="min-h-[44px] rounded border border-primary px-4 py-2 text-sm font-medium text-primary hover:bg-primary/5 sm:min-h-0 sm:px-3 sm:py-1.5"
+									onclick={() => openPreview(url)}
+									aria-label="Preview items in {title}"
+								>
+									Preview
+								</button>
 								<button
 									class="min-h-[44px] rounded bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-hover sm:min-h-0 sm:px-3 sm:py-1.5"
 									onclick={() => openInNewTab(url)}
