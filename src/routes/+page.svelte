@@ -119,7 +119,9 @@
 </script>
 
 <main class="mx-auto flex min-h-screen max-w-4xl flex-col px-4 sm:px-6 lg:px-8">
-	<section class="flex min-h-screen flex-1 flex-col items-center justify-start pt-24 sm:pt-32 lg:pt-40">
+	<section
+		class="flex min-h-screen flex-1 flex-col items-center justify-start pt-24 sm:pt-32 lg:pt-40"
+	>
 		<header class="mb-6 text-center sm:mb-8">
 			<h1 class="gradient-text mb-2 text-3xl font-medium sm:mb-3 sm:text-4xl">RSS Finder</h1>
 			<p class="text-sm text-muted-foreground sm:text-base">Discover RSS feeds from any website</p>
@@ -132,7 +134,9 @@
 			aria-label="RSS feed search"
 			onsubmit={handleSubmit}
 		>
-			<div class="flex flex-col gap-2 rounded-lg border border-border bg-white p-1 sm:flex-row sm:items-stretch sm:gap-3">
+			<div
+				class="flex flex-col gap-2 rounded-lg border border-border bg-white p-1 sm:flex-row sm:items-stretch sm:gap-3"
+			>
 				<label for="urlInput" class="sr-only">Website URL</label>
 				<input
 					id="urlInput"
@@ -155,7 +159,10 @@
 					<span class="button-text">{isLoading ? 'Discovering...' : 'Find RSS'}</span>
 				</button>
 			</div>
-			<small id="url-help" class="mt-2 block text-center text-xs text-muted-foreground sm:mt-3 sm:text-sm">
+			<small
+				id="url-help"
+				class="mt-2 block text-center text-xs text-muted-foreground sm:mt-3 sm:text-sm"
+			>
 				Enter any website URL to discover its RSS feeds
 			</small>
 		</form>
@@ -191,11 +198,17 @@
 					</div>
 				</div>
 			{:else if error}
-				<div class="rounded-lg border border-destructive bg-destructive/5 px-3 py-2.5 text-center text-xs text-destructive sm:px-4 sm:py-3 sm:text-sm" role="alert">
+				<div
+					class="rounded-lg border border-destructive bg-destructive/5 px-3 py-2.5 text-center text-xs text-destructive sm:px-4 sm:py-3 sm:text-sm"
+					role="alert"
+				>
 					Error: {error}
 				</div>
 			{:else if feeds.length === 0 && hasSearched && urlInput.trim()}
-				<div class="rounded-lg border border-destructive bg-destructive/5 px-3 py-2.5 text-center text-xs text-destructive sm:px-4 sm:py-3 sm:text-sm" role="alert">
+				<div
+					class="rounded-lg border border-destructive bg-destructive/5 px-3 py-2.5 text-center text-xs text-destructive sm:px-4 sm:py-3 sm:text-sm"
+					role="alert"
+				>
 					No RSS feeds found for this URL.
 				</div>
 			{:else if feeds.length > 0}
@@ -214,10 +227,12 @@
 						{@const title = feedObj.title || feedObj.name || 'Untitled Feed'}
 						{@const url =
 							feedObj.url || feedObj.href || feedObj.link || (typeof feed === 'string' ? feed : '')}
-						<article class="flex flex-col gap-3 rounded-lg border border-border bg-white p-3 hover:border-primary sm:flex-row sm:items-center sm:gap-0 sm:p-4">
+						<article
+							class="flex flex-col gap-3 rounded-lg border border-border bg-white p-3 hover:border-primary sm:flex-row sm:items-center sm:gap-0 sm:p-4"
+						>
 							<div class="flex-1 sm:mr-3">
 								<h3 class="mb-1 text-sm font-medium sm:text-base">{title}</h3>
-								<div class="text-xs text-muted-foreground break-all sm:text-sm">{url}</div>
+								<div class="text-xs break-all text-muted-foreground sm:text-sm">{url}</div>
 							</div>
 							<div class="flex gap-2 self-start sm:self-center">
 								<button
