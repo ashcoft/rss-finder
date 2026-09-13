@@ -8,5 +8,6 @@ bun.lockb
 # Miscellaneous
 /static/
 
-# Generated/third-party workflow (declares "DO NOT EDIT")
+# Generated/third-party workflows (not edited by hand)
 .github/workflows/pullfrog.yml
+.github/workflows/codeql.yml
