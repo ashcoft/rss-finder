@@ -69,9 +69,13 @@ jobs:
         continue-on-error: true
         run: snyk code test --sarif > snyk-code.sarif
 
-      # Uploads immediately after the scan so a later step cannot skip it.
+      # Uploads right after the scan so a later failure cannot skip it.
+      # continue-on-error because a scan that failed for a non-finding reason
+      # leaves an empty/invalid SARIF that upload-sarif would reject, and that
+      # must not gate the independent scans below.
       - name: Upload result to GitHub Code Scanning
         if: env.SNYK_TOKEN != ''
+        continue-on-error: true
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: snyk-code.sarif
