@@ -34,6 +34,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  contents: read # required by actions/checkout to fetch the repository
   pull-requests: read # allows SonarQube to decorate PRs with analysis results
 
 jobs:
@@ -52,9 +53,11 @@ jobs:
         with:
           # Shallow clones should be disabled for a better relevancy of analysis.
           fetch-depth: 0
+          # The scanner reads local git metadata; it does not need remote credentials.
+          persist-credentials: false
 
       - name: Analyze with SonarQube
-        if: env.SONAR_TOKEN != ''
+        if: env.SONAR_TOKEN != '' && env.SONAR_HOST_URL != ''
 
         # You can pin the exact commit or the version.
         # uses: SonarSource/sonarqube-scan-action@v1.1.0
