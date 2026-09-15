@@ -76,9 +76,41 @@ jobs:
             exit "$code"
           fi
 
-      # Uploads before the independent scans so their failure cannot lose results.
-      # A failed scan leaves an empty or malformed file, so only a parseable
-      # SARIF is uploaded; a rejected-but-valid upload still fails the job.
+      # Runs Snyk Open Source (SCA) analysis and uploads result to Snyk.
+      # --dev is required here because nearly every dependency is a devDependency.
+      - name: Snyk Open Source monitor
+        if: env.SNYK_TOKEN != ''
+        run: snyk monitor --all-projects --dev
+
+      # Runs Snyk Infrastructure as Code (IaC) analysis and uploads result to Snyk.
+      # Exit 1 means findings and exit 3 means this repo has no IaC files, which is
+      # the expected steady state here; both are tolerated. Anything else is real.
+      - name: Snyk IaC test and report
+        if: env.SNYK_TOKEN != ''
+        run: |
+          set +e
+          snyk iac test --report
+          code=$?
+          if [ "$code" -eq 3 ]; then
+            echo "::warning::No supported IaC files found; skipping the IaC scan."
+          elif [ "$code" -gt 1 ]; then
+            echo "::error::snyk iac test did not complete (exit $code)"
+            exit "$code"
+          fi
+
+      # Build the docker image for testing
+      - name: Build a Docker image
+        if: env.SNYK_TOKEN != ''
+        run: docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:snyk-scan .
+        # Runs Snyk Container (Container and SCA) analysis and uploads result to Snyk.
+      - name: Snyk Container monitor
+        if: env.SNYK_TOKEN != ''
+        run: snyk container monitor ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:snyk-scan --file=Dockerfile
+
+      # Last, so an upload failure cannot suppress the independent scans above, and
+      # gated on !cancelled() so a scan failure above cannot lose the results.
+      # A failed scan leaves an empty or malformed file, so only a parseable SARIF
+      # is uploaded; a rejected-but-valid upload still fails the job.
       - name: Check Snyk Code SARIF
         if: ${{ !cancelled() && env.SNYK_TOKEN != '' }}
         id: sarif
@@ -95,31 +127,3 @@ jobs:
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: snyk-code.sarif
-
-      # Runs Snyk Open Source (SCA) analysis and uploads result to Snyk.
-      # --dev is required here because nearly every dependency is a devDependency.
-      - name: Snyk Open Source monitor
-        if: env.SNYK_TOKEN != ''
-        run: snyk monitor --all-projects --dev
-
-      # Runs Snyk Infrastructure as Code (IaC) analysis and uploads result to Snyk.
-      # As with Snyk Code, exit 1 means findings; exit 2/3 means no scan ran.
-      - name: Snyk IaC test and report
-        if: env.SNYK_TOKEN != ''
-        run: |
-          set +e
-          snyk iac test --report
-          code=$?
-          if [ "$code" -gt 1 ]; then
-            echo "::error::snyk iac test did not complete (exit $code)"
-            exit "$code"
-          fi
-
-      # Build the docker image for testing
-      - name: Build a Docker image
-        if: env.SNYK_TOKEN != ''
-        run: docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:snyk-scan .
-        # Runs Snyk Container (Container and SCA) analysis and uploads result to Snyk.
-      - name: Snyk Container monitor
-        if: env.SNYK_TOKEN != ''
-        run: snyk container monitor ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:snyk-scan --file=Dockerfile
