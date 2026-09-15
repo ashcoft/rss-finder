@@ -59,8 +59,10 @@ jobs:
       - name: Analyze with SonarQube
         if: env.SONAR_TOKEN != '' && env.SONAR_HOST_URL != ''
 
-        # You can pin the exact commit or the version.
-        # uses: SonarSource/sonarqube-scan-action@v1.1.0
+        # Pinned to the exact commit. The 40-hex pin is indistinguishable from an
+        # API key to the Semgrep "detected-sonarqube-docs-api-key" rule, so the
+        # false positive is suppressed rather than downgrading to a mutable tag.
+        # nosemgrep: generic.secrets.security.detected-sonarqube-docs-api-key.detected-sonarqube-docs-api-key
         uses: SonarSource/sonarqube-scan-action@7295e71c9583053f5bf40e9d4068a0c974603ec8
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Needed to get PR information
