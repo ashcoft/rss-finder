@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Feed } from 'feedfinder-ts';
 import type { RequestEvent } from '@sveltejs/kit';
 import { POST } from './+server.js';
@@ -25,6 +25,10 @@ describe('POST /api/find-feeds', () => {
 		mockedFind.mockReset();
 	});
 
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
 	it('returns found feeds for a valid URL', async () => {
 		const feeds: Feed[] = [{ title: 'Example RSS', link: 'https://example.com/rss' }];
 		mockedFind.mockResolvedValue(feeds);
@@ -40,6 +44,8 @@ describe('POST /api/find-feeds', () => {
 
 	it('normalizes a bare domain before searching', async () => {
 		mockedFind.mockResolvedValue([]);
+		// Stub the block-detection probe so no real network request is made
+		vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('', { status: 200 })));
 
 		const response = await POST(makeEvent({ url: 'example.com' }));
 
@@ -47,6 +53,28 @@ describe('POST /api/find-feeds', () => {
 			userAgent: 'rss-finder/2.0'
 		});
 		expect(response.status).toBe(200);
+	});
+
+	it('returns 502 with a clear error when the site blocks the request', async () => {
+		mockedFind.mockResolvedValue([]);
+		vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('', { status: 403 })));
+
+		const response = await POST(makeEvent({ url: 'https://protected.example' }));
+
+		expect(response.status).toBe(502);
+		const data = await response.json();
+		expect(data.error).toContain('blocked our request');
+		expect(data.error).toContain('403');
+	});
+
+	it('still returns empty feeds when the probe succeeds but no feeds exist', async () => {
+		mockedFind.mockResolvedValue([]);
+		vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('', { status: 200 })));
+
+		const response = await POST(makeEvent({ url: 'https://feedless.example' }));
+
+		expect(response.status).toBe(200);
+		await expect(response.json()).resolves.toEqual({ feeds: [] });
 	});
 
 	it('returns 400 when the URL is missing', async () => {
