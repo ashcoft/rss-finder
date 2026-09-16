@@ -11,12 +11,15 @@ name: ESLint
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ['main']
   pull_request:
     # The branches below must be a subset of the branches above
-    branches: [ "main" ]
+    branches: ['main']
   schedule:
     - cron: '38 15 * * 2'
+
+permissions:
+  contents: read
 
 jobs:
   eslint:
@@ -27,26 +30,46 @@ jobs:
       security-events: write
       actions: read # only required for a private repository by github/codeql-action/upload-sarif to get the Action run status
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v5
 
-      - name: Install ESLint
-        run: |
-          npm install eslint@8.10.0
-          npm install @microsoft/eslint-formatter-sarif@3.1.0
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 12
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # Lint with the repo's own ESLint 9 and its flat config (eslint.config.js).
+      # Config discovery is automatic, so no --config/--ext flags are passed;
+      # those legacy flags are rejected by ESLint 9 and --ext never covered
+      # .svelte files, which are most of this project's source.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # ESLint exits 1 when it reports findings, which is expected and must not
+      # fail the job; exit 2 (fatal error) means the scan never completed.
       - name: Run ESLint
         env:
-          SARIF_ESLINT_IGNORE_SUPPRESSED: "true"
-        run: npx eslint .
-          --config .eslintrc.js
-          --ext .js,.jsx,.ts,.tsx
-          --format @microsoft/eslint-formatter-sarif
-          --output-file eslint-results.sarif
-        continue-on-error: true
+          SARIF_ESLINT_IGNORE_SUPPRESSED: 'true'
+        run: |
+          set +e
+          pnpm exec eslint . \
+            --format @microsoft/eslint-formatter-sarif \
+            --output-file eslint-results.sarif
+          code=$?
+          if [ "$code" -gt 1 ]; then
+            echo "::error::eslint did not complete (exit $code)"
+            exit "$code"
+          fi
 
+      # Reached only when the step above completed, so the SARIF file exists.
       - name: Upload analysis results to GitHub
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: eslint-results.sarif
           wait-for-processing: true
