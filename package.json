@@ -47,7 +47,7 @@
 		]
 	},
 	"dependencies": {
-		"fast-xml-parser": "5.2.5",
+		"fast-xml-parser": "5.7.0",
 		"feedfinder-ts": "^1.0.3"
 	}
 }
