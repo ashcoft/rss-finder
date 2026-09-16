@@ -112,7 +112,7 @@
 		<button
 			bind:this={closeButton}
 			type="button"
-			class="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+			class="hover:text-foreground rounded p-1.5 text-muted-foreground hover:bg-muted"
 			onclick={onclose}
 			aria-label="Close preview"
 		>
@@ -134,13 +134,15 @@
 	<div class="flex-1 overflow-y-auto p-4">
 		{#if isLoading}
 			<div class="flex flex-col gap-4" role="status" aria-live="polite">
-				{#each [0, 1, 2, 3] as _ (0)}
+				{#each [0, 1, 2, 3] as skeleton (skeleton)}
 					<div class="flex flex-col gap-2 rounded-lg border border-border bg-white p-4">
 						<div
-							class="h-5 w-3/4 animate-pulse rounded bg-gradient-to-r from-border via-muted to-border bg-[length:200%_100%]"
+							class="h-5 animate-pulse rounded bg-gradient-to-r from-border via-muted to-border bg-[length:200%_100%]"
+							style="width: {skeleton % 2 ? '62%' : '78%'}"
 						></div>
 						<div
-							class="h-4 w-1/2 animate-pulse rounded bg-gradient-to-r from-border via-muted to-border bg-[length:200%_100%]"
+							class="h-4 animate-pulse rounded bg-gradient-to-r from-border via-muted to-border bg-[length:200%_100%]"
+							style="width: {skeleton % 2 ? '45%' : '55%'}"
 						></div>
 					</div>
 				{/each}
@@ -245,5 +247,3 @@
 		</div>
 	{/if}
 </div>
-
-
