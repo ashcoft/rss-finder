@@ -6,6 +6,8 @@ A modern web application to discover RSS feeds from any website. Powered by feed
 
 - **Robust Detection**: Uses [feedfinder-ts](https://github.com/0x2E/feedfinder-ts) under the hood for comprehensive RSS feed discovery
 - **Fast & Lightweight**: Optimized for performance with minimal dependencies
+- **Shareable Deep Links**: Search results are reflected in the URL as a `?q=` parameter, so you can link directly to a search (e.g. `https://your-instance/?q=havo.co.id` opens with the search already performed, like [rssfinder.app](https://rssfinder.app))
+- **Side Panel Preview**: Clicking **Preview** on a search result opens an animated slide-in side panel showing the latest feed items — no page navigation required. The full-page view at `/preview/<feed>` remains available for direct links (also linked from the panel's **Full page** button)
 
 ## Getting Started
 

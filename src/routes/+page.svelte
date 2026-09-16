@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { normalizeUrl, encodeFeedUrl } from '$lib/utils.js';
+	import { normalizeUrl } from '$lib/utils.js';
+	import FeedPreviewPanel from '$lib/components/FeedPreviewPanel.svelte';
 
 	let urlInput = $state('');
 	let isLoading = $state(false);
@@ -8,11 +9,13 @@
 	let error = $state('');
 	let successMessage = $state(false);
 	let hasSearched = $state(false);
+	let previewFeedUrl = $state<string | null>(null);
 
 	function clearResults() {
 		feeds = [];
 		error = '';
 		hasSearched = false;
+		syncUrlQuery('');
 	}
 
 	async function handleSubmit(e: Event) {
@@ -34,6 +37,8 @@
 			hasSearched = true;
 			return;
 		}
+
+		syncUrlQuery(url.trim());
 
 		isLoading = true;
 		error = '';
@@ -68,6 +73,14 @@
 		feeds = [];
 		error = '';
 		hasSearched = false;
+		syncUrlQuery('');
+	}
+
+	function syncUrlQuery(term: string) {
+		// Keep the ?q= parameter in sync so searches are shareable
+		// (e.g. /?q=havo.co.id, like rssfinder.app)
+		const newUrl = term ? `/?q=${encodeURIComponent(term)}` : '/';
+		window.history.replaceState(window.history.state, '', newUrl);
 	}
 
 	function openInNewTab(url: string) {
@@ -75,7 +88,11 @@
 	}
 
 	function openPreview(url: string) {
-		window.open(`/preview/${encodeFeedUrl(url)}`, '_blank');
+		previewFeedUrl = url;
+	}
+
+	function closePreview() {
+		previewFeedUrl = null;
 	}
 
 	async function copyToClipboard(url: string) {
@@ -95,9 +112,21 @@
 	}
 
 	onMount(() => {
+		// Deep-link support: /?q=havo.co.id runs the search automatically,
+		// like rssfinder.app
+		const q = new URLSearchParams(window.location.search).get('q')?.trim();
+		if (q) {
+			urlInput = q;
+			void performSearch(q);
+		}
+
 		function handleGlobalKeyDown(e: KeyboardEvent) {
-			// Allow Escape key to clear results
+			// Allow Escape key to close the preview panel first, then clear results
 			if (e.key === 'Escape') {
+				if (previewFeedUrl) {
+					closePreview();
+					return;
+				}
 				clearResults();
 				const input = document.getElementById('urlInput') as HTMLInputElement;
 				if (input) input.focus();
@@ -278,6 +307,8 @@
 			GitHub Project
 		</a>
 	</footer>
+
+	<FeedPreviewPanel feedUrl={previewFeedUrl} onclose={closePreview} />
 
 	<div
 		class="success-message fixed top-4 right-4 z-50 rounded bg-black px-3 py-2 text-xs text-white sm:text-sm"
