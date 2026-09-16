@@ -66,7 +66,7 @@ jobs:
       # snyk exits 1 when it finds issues, which is expected and must not fail
       # the job; exit 2 (error) and 3 (no supported projects) mean no scan ran.
       - name: Snyk Code test
-        if: env.SNYK_TOKEN != ''
+        if: ${{ !cancelled() && env.SNYK_TOKEN != '' }}
         run: |
           set +e
           snyk code test --sarif > snyk-code.sarif
@@ -79,14 +79,14 @@ jobs:
       # Runs Snyk Open Source (SCA) analysis and uploads result to Snyk.
       # --dev is required here because nearly every dependency is a devDependency.
       - name: Snyk Open Source monitor
-        if: env.SNYK_TOKEN != ''
+        if: ${{ !cancelled() && env.SNYK_TOKEN != '' }}
         run: snyk monitor --all-projects --dev
 
       # Runs Snyk Infrastructure as Code (IaC) analysis and uploads result to Snyk.
       # Exit 1 means findings and exit 3 means this repo has no IaC files, which is
       # the expected steady state here; both are tolerated. Anything else is real.
       - name: Snyk IaC test and report
-        if: env.SNYK_TOKEN != ''
+        if: ${{ !cancelled() && env.SNYK_TOKEN != '' }}
         run: |
           set +e
           snyk iac test --report
@@ -100,11 +100,13 @@ jobs:
 
       # Build the docker image for testing
       - name: Build a Docker image
-        if: env.SNYK_TOKEN != ''
+        id: build
+        if: ${{ !cancelled() && env.SNYK_TOKEN != '' }}
         run: docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:snyk-scan .
         # Runs Snyk Container (Container and SCA) analysis and uploads result to Snyk.
+        # Needs the image from the build above, so it is gated on that step succeeding.
       - name: Snyk Container monitor
-        if: env.SNYK_TOKEN != ''
+        if: ${{ !cancelled() && env.SNYK_TOKEN != '' && steps.build.outcome == 'success' }}
         run: snyk container monitor ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:snyk-scan --file=Dockerfile
 
       # Last, so an upload failure cannot suppress the independent scans above, and
