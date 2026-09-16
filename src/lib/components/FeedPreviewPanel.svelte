@@ -28,6 +28,8 @@
 
 		try {
 			const response = await fetch(`/api/feed-preview?url=${encodeURIComponent(url)}`);
+			// Ignore stale responses if a different feed was opened in the meantime
+			if (feedUrl !== url) return;
 			const data = await response.json();
 
 			if (!response.ok) {
@@ -36,9 +38,12 @@
 
 			feed = data.feed || null;
 		} catch (err) {
+			if (feedUrl !== url) return;
 			error = (err as Error).message;
 		} finally {
-			isLoading = false;
+			if (feedUrl === url) {
+				isLoading = false;
+			}
 		}
 	}
 
@@ -75,8 +80,10 @@
 		if (open) {
 			document.body.style.overflow = 'hidden';
 			closeButton?.focus();
-		} else {
-			document.body.style.overflow = '';
+			// Restore scrolling on close or when navigating away with the panel open
+			return () => {
+				document.body.style.overflow = '';
+			};
 		}
 	});
 
