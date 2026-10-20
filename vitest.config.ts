@@ -13,7 +13,7 @@ export default defineConfig({
 			reporter: ['text', 'lcov'],
 			// Only measure the code we own and can unit test.
 			include: ['src/**/*.ts'],
-			exclude: ['src/**/*.test.ts', 'src/app.d.ts', 'src/routes/**/+page.ts']
+			exclude: ['src/**/*.test.ts', 'src/app.d.ts']
 		}
 	}
 });

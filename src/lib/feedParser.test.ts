@@ -248,15 +248,28 @@ describe('parseFeedXml', () => {
 		);
 	});
 
-	it('falls back to an entry title when an item only has a nested title object', () => {
+	it('falls back to the text of a nested title object', () => {
+		// `type="html"` makes fast-xml-parser emit an object with `#text`, exercising the
+		// nested-object branch of toText rather than a plain string.
 		const xml = `<rss version="2.0"><channel><title>T</title>
-  <item><title><![CDATA[Real Title]]></title><link>https://example.com/a</link></item>
+  <item><title type="html">Nested Title</title><link>https://example.com/a</link></item>
 </channel></rss>`;
 
-		expect(parseFeedXml(xml, 'https://example.com').items[0].title).toBe('Real Title');
+		expect(parseFeedXml(xml, 'https://example.com').items[0].title).toBe('Nested Title');
 	});
 
 	it('prefers description over summary when both are present', () => {
+		const xml = `<feed xmlns="http://www.w3.org/2005/Atom"><title>A</title>
+  <entry><title>E</title><link href="https://example.com/e"/>
+    <description>Description text</description>
+    <summary>Summary text</summary>
+    <content>Content text</content></entry>
+</feed>`;
+
+		expect(parseFeedXml(xml, 'https://example.com').items[0].description).toBe('Description text');
+	});
+
+	it('prefers summary over content when there is no description', () => {
 		const xml = `<feed xmlns="http://www.w3.org/2005/Atom"><title>A</title>
   <entry><title>E</title><link href="https://example.com/e"/>
     <summary>Summary text</summary><content>Content text</content></entry>
