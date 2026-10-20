@@ -1,0 +1,62 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+  # Manual escape hatch, e.g. to re-run a release that failed after the tag was created.
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Compute the next version without tagging, committing or publishing
+        type: boolean
+        default: false
+
+# Releases are serialised: two overlapping runs would race on the same tag.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write # push the release commit and tag
+  issues: write # comment on released issues
+  pull-requests: write # comment on released pull requests
+
+jobs:
+  release:
+    name: Semantic release
+    runs-on: ubuntu-latest
+    # Never release from a fork, and never release the bot's own release commit.
+    if: >-
+      github.repository == 'ashcoft/rss-finder'
+      && !contains(github.event.head_commit.message, '[skip ci]')
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          # semantic-release walks the full history to find the last tag.
+          fetch-depth: 0
+          # The token is injected into the push URL by semantic-release itself, so it
+          # must not also be persisted into .git/config.
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 12
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # `workflow_dispatch` is the only trigger that sets inputs, so the default
+        # empty value keeps push-triggered runs on the normal (non-dry-run) path.
+        run: pnpm exec semantic-release ${{ inputs.dry_run && '--dry-run' || '' }}
