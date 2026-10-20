@@ -71,4 +71,25 @@ describe('POST /api/find-feeds', () => {
 		expect(response.status).toBe(500);
 		await expect(response.json()).resolves.toEqual({ error: 'Failed to find RSS feeds' });
 	});
+
+	it('returns 500 when the request body is not valid JSON', async () => {
+		const event = {
+			request: new Request('http://localhost/api/find-feeds', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: '{not json'
+			})
+		} as RequestEvent;
+
+		const response = await POST(event);
+
+		expect(response.status).toBe(500);
+		await expect(response.json()).resolves.toEqual({ error: 'Failed to find RSS feeds' });
+	});
+
+	it('returns 400 when the URL is not a string', async () => {
+		const response = await POST(makeEvent({ url: 42 }));
+
+		expect(response.status).toBe(400);
+	});
 });
