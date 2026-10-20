@@ -9,6 +9,7 @@ node_modules
 /.svelte-kit
 /build
 /eslint-results.sarif
+/coverage
 
 # OS
 .DS_Store
