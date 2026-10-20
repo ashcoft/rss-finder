@@ -34,6 +34,16 @@ describe('encodeFeedUrl', () => {
 		const url = 'https://xn--r8jz45g.jp/feed';
 		expect(decodeFeedUrl(encodeFeedUrl(url))).toBe(url);
 	});
+
+	it('decodes a legacy Latin-1 link created by the pre-UTF-8 encoder', () => {
+		// btoa() output for a URL containing a raw Latin-1 byte (é = 0xE9).
+		const legacy = btoa('https://example.com/café/feed.xml')
+			.replace(/\+/g, '-')
+			.replace(/\//g, '_')
+			.replace(/=+$/, '');
+
+		expect(decodeFeedUrl(legacy)).toBe('https://example.com/café/feed.xml');
+	});
 });
 
 describe('normalizeUrl', () => {
@@ -92,5 +102,28 @@ describe('normalizeUrl', () => {
 
 	it('does not treat a domain starting with "http" as an existing scheme', () => {
 		expect(normalizeUrl('httpbin.org')).toBe('https://httpbin.org');
+	});
+
+	it('accepts a scheme without slashes, e.g. http:example.com', () => {
+		const normalized = normalizeUrl('http:example.com');
+		expect(normalized).toBe('http:example.com');
+		expect(new URL(normalized).protocol).toBe('http:');
+		expect(new URL(normalized).hostname).toBe('example.com');
+	});
+
+	it('accepts an https scheme without slashes', () => {
+		const normalized = normalizeUrl('https:example.com');
+		expect(new URL(normalized).hostname).toBe('example.com');
+	});
+
+	it('rejects non-http schemes that carry no slashes', () => {
+		expect(() => normalizeUrl('mailto:user@example.com')).toThrow('Invalid URL format');
+		expect(() => normalizeUrl('javascript:alert(1)')).toThrow('Invalid URL format');
+	});
+
+	it('treats a host with a port as a host, not as a scheme', () => {
+		expect(normalizeUrl('example.com:8080')).toBe('https://example.com:8080');
+		expect(normalizeUrl('localhost:3000')).toBe('https://localhost:3000');
+		expect(normalizeUrl('example.com:8080/path')).toBe('https://example.com:8080/path');
 	});
 });
