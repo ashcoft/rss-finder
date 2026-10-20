@@ -72,7 +72,7 @@ describe('POST /api/find-feeds', () => {
 		await expect(response.json()).resolves.toEqual({ error: 'Failed to find RSS feeds' });
 	});
 
-	it('returns 500 when the request body is not valid JSON', async () => {
+	it('returns 400 when the request body is not valid JSON', async () => {
 		const event = {
 			request: new Request('http://localhost/api/find-feeds', {
 				method: 'POST',
@@ -83,13 +83,20 @@ describe('POST /api/find-feeds', () => {
 
 		const response = await POST(event);
 
-		expect(response.status).toBe(500);
-		await expect(response.json()).resolves.toEqual({ error: 'Failed to find RSS feeds' });
+		expect(response.status).toBe(400);
+		await expect(response.json()).resolves.toEqual({ error: 'Invalid JSON body' });
 	});
 
 	it('returns 400 when the URL is not a string', async () => {
 		const response = await POST(makeEvent({ url: 42 }));
 
 		expect(response.status).toBe(400);
+	});
+
+	it('returns 400 for a non-http scheme', async () => {
+		const response = await POST(makeEvent({ url: 'ftp://example.com' }));
+
+		expect(response.status).toBe(400);
+		await expect(response.json()).resolves.toEqual({ error: 'Invalid URL format' });
 	});
 });
