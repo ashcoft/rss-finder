@@ -91,6 +91,7 @@ describe('POST /api/find-feeds', () => {
 		const response = await POST(makeEvent({ url: 42 }));
 
 		expect(response.status).toBe(400);
+		await expect(response.json()).resolves.toEqual({ error: 'URL is required' });
 	});
 
 	it('returns 400 for a non-http scheme', async () => {

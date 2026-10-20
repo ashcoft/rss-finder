@@ -12,13 +12,13 @@ export const POST: RequestHandler = async ({ request }) => {
 		return json({ error: 'Invalid JSON body' }, { status: 400 });
 	}
 
-	if (!url) {
+	if (typeof url !== 'string' || !url) {
 		return json({ error: 'URL is required' }, { status: 400 });
 	}
 
 	let normalizedUrl: string;
 	try {
-		normalizedUrl = normalizeUrl(url as string);
+		normalizedUrl = normalizeUrl(url);
 	} catch (error) {
 		return json({ error: (error as Error).message }, { status: 400 });
 	}
