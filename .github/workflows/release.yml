@@ -1,0 +1,72 @@
+name: Release
+
+# Invoked by ci.yml (via workflow_call) once the test job passes, so a commit is
+# only released after its checks succeed, and always from the same checkout CI
+# validated. Also dispatchable by hand for commits not covered by the latest tag.
+on:
+  workflow_call:
+  # Manual dispatch releases commits not yet covered by the latest tag. It is
+  # NOT a retry mechanism: semantic-release creates the tag before it publishes
+  # the GitHub Release, so if publication fails the tag already exists and a
+  # rerun finds no new commits. Create that GitHub Release by hand instead.
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Compute the next version without tagging, committing or publishing
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Semantic release
+    runs-on: ubuntu-latest
+    # Only release from the default branch. A manual dispatch from another branch
+    # would otherwise run semantic-release against that branch's configuration.
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: write # push the release commit and tag
+      issues: write # comment on released issues
+      pull-requests: write # comment on released pull requests
+    # Releases are serialised: two overlapping runs would race on the same tag.
+    # Dry runs get their own group so a queued dry run cannot replace a pending
+    # production release (GitHub keeps only one pending run per group).
+    concurrency:
+      group: release-${{ inputs.dry_run && 'dry-run' || 'publish' }}
+      cancel-in-progress: false
+    steps:
+      - name: Checkout repository
+        # Pinned by SHA: this job holds a write-scoped token, so a retagged action
+        # could otherwise change the code that runs with it.
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          # semantic-release walks the full history to find the last tag.
+          fetch-depth: 0
+          # The token is injected into the push URL by semantic-release itself, so it
+          # must not also be persisted into .git/config.
+          persist-credentials: false
+
+      - name: Setup pnpm
+        # Pinned to the v4.3.0 commit, matching eslint.yml: third-party actions are
+        # pinned by SHA so a retagged release cannot change what CI runs.
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+        with:
+          version: 12
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # `inputs` is only populated for workflow_dispatch, so called runs always
+        # take the normal (non-dry-run) path.
+        run: pnpm exec semantic-release ${{ inputs.dry_run && '--dry-run' || '' }}

@@ -7,6 +7,13 @@ export default defineConfig({
 	test: {
 		environment: 'node',
 		include: ['src/**/*.test.ts'],
-		restoreMocks: true
+		restoreMocks: true,
+		coverage: {
+			provider: 'v8',
+			reporter: ['text', 'lcov'],
+			// Only measure the code we own and can unit test.
+			include: ['src/**/*.ts'],
+			exclude: ['src/**/*.test.ts', 'src/app.d.ts']
+		}
 	}
 });

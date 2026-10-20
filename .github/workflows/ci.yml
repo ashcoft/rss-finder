@@ -41,3 +41,17 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+  release:
+    name: Release
+    # Reuse the release workflow only for pushes to main, and only once the test
+    # job has passed, so nothing is tagged unless its checks are green. Runs from
+    # pull requests are skipped: the token is read-only there and the release
+    # workflow refuses any ref that is not main.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: test
+    permissions:
+      contents: write # push the release commit and tag
+      issues: write # comment on released issues
+      pull-requests: write # comment on released pull requests
+    uses: ./.github/workflows/release.yml
