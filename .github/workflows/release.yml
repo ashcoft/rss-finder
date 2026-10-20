@@ -38,7 +38,9 @@ jobs:
       cancel-in-progress: false
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        # Pinned by SHA: this job holds a write-scoped token, so a retagged action
+        # could otherwise change the code that runs with it.
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           # semantic-release walks the full history to find the last tag.
           fetch-depth: 0
@@ -54,7 +56,7 @@ jobs:
           version: 12
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: pnpm
