@@ -1,21 +1,24 @@
 name: Release
 
+# Releases are driven by CI rather than by the push itself, so a commit whose
+# checks fail is never tagged or published. CI runs on push to main and this
+# only fires once that run has concluded successfully for the same SHA.
 on:
-  push:
+  workflow_run:
+    workflows: ['CI']
+    types: [completed]
     branches:
       - main
-  # Manual escape hatch, e.g. to re-run a release that failed after the tag was created.
+  # Manual dispatch releases commits not yet covered by the latest tag. It is
+  # NOT a retry mechanism: semantic-release creates the tag before it publishes
+  # the GitHub Release, so if publication fails the tag already exists and a
+  # rerun finds no new commits. Create that GitHub Release by hand instead.
   workflow_dispatch:
     inputs:
       dry_run:
         description: Compute the next version without tagging, committing or publishing
         type: boolean
         default: false
-
-# Releases are serialised: two overlapping runs would race on the same tag.
-concurrency:
-  group: release-${{ github.ref }}
-  cancel-in-progress: false
 
 permissions:
   contents: write # push the release commit and tag
@@ -26,14 +29,29 @@ jobs:
   release:
     name: Semantic release
     runs-on: ubuntu-latest
-    # Never release from a fork, and never release the bot's own release commit.
+    # workflow_run fires for every CI conclusion, including failures and
+    # pull_request runs, so narrow it to a successful push run on main. Manual
+    # dispatches must also come from main, otherwise another branch could pick
+    # the release configuration that runs with a write-scoped token.
     if: >-
       github.repository == 'ashcoft/rss-finder'
-      && !contains(github.event.head_commit.message, '[skip ci]')
+      && (github.event_name == 'workflow_dispatch'
+      && github.ref == 'refs/heads/main'
+      || github.event.workflow_run.conclusion == 'success'
+      && github.event.workflow_run.event == 'push'
+      && github.event.workflow_run.head_branch == 'main')
+    # Releases are serialised: two overlapping runs would race on the same tag.
+    # Dry runs get their own group so a queued dry run cannot replace a pending
+    # production release (GitHub keeps only one pending run per group).
+    concurrency:
+      group: release-${{ inputs.dry_run && 'dry-run' || 'publish' }}-${{ github.ref }}
+      cancel-in-progress: false
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
+          # Release the exact commit CI validated, not whatever main points at now.
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
           # semantic-release walks the full history to find the last tag.
           fetch-depth: 0
           # The token is injected into the push URL by semantic-release itself, so it
@@ -59,6 +77,6 @@ jobs:
       - name: Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        # `workflow_dispatch` is the only trigger that sets inputs, so the default
-        # empty value keeps push-triggered runs on the normal (non-dry-run) path.
+        # `inputs` is only populated for workflow_dispatch, so push-triggered runs
+        # always take the normal (non-dry-run) path.
         run: pnpm exec semantic-release ${{ inputs.dry_run && '--dry-run' || '' }}
