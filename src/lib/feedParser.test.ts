@@ -116,4 +116,152 @@ describe('parseFeedXml', () => {
 	it('throws for empty input', () => {
 		expect(() => parseFeedXml('', 'https://example.com')).toThrow();
 	});
+
+	it('decodes astral (non-BMP) numeric entities without truncation', () => {
+		const xml = '<rss version="2.0"><channel><title>x &#128512; y</title></channel></rss>';
+
+		const feed = parseFeedXml(xml, 'https://example.com');
+
+		expect(feed.title).toBe('x \u{1F600} y');
+	});
+
+	it('decodes hexadecimal astral entities', () => {
+		const xml = '<rss version="2.0"><channel><title>&#x1F600;</title></channel></rss>';
+
+		expect(parseFeedXml(xml, 'https://example.com').title).toBe('\u{1F600}');
+	});
+
+	it('leaves out-of-range numeric entities untouched', () => {
+		const xml = '<rss version="2.0"><channel><title>&#1114112;</title></channel></rss>';
+
+		expect(parseFeedXml(xml, 'https://example.com').title).toBe('&#1114112;');
+	});
+
+	it('preserves CDATA content verbatim', () => {
+		const xml = `<rss version="2.0"><channel><title><![CDATA[My & Blog]]></title>
+  <item><title><![CDATA[Post <b>1</b>]]></title><link>https://example.com/1</link></item>
+</channel></rss>`;
+
+		const feed = parseFeedXml(xml, 'https://example.com');
+
+		expect(feed.title).toBe('My & Blog');
+		expect(feed.items[0].title).toBe('Post <b>1</b>');
+	});
+
+	it('falls back to "Untitled" when an item has no title', () => {
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><link>https://example.com/x</link></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com').items[0].title).toBe('Untitled');
+	});
+
+	it('falls back to "Untitled Feed" when the channel has no title', () => {
+		const xml = '<rss version="2.0"><channel><link>https://example.com</link></channel></rss>';
+
+		expect(parseFeedXml(xml, 'https://example.com').title).toBe('Untitled Feed');
+	});
+
+	it('treats a self-closing empty link as an empty string', () => {
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title>A</title><link/></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com').items[0].link).toBe('');
+	});
+
+	it('keeps an absolute link even when it differs in scheme from the base', () => {
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title>A</title><link>http://plain.example/a</link></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed').items[0].link).toBe(
+			'http://plain.example/a'
+		);
+	});
+
+	it('returns an empty items array for a feed with no entries', () => {
+		const xml = '<rss version="2.0"><channel><title>Empty</title></channel></rss>';
+
+		expect(parseFeedXml(xml, 'https://example.com').items).toEqual([]);
+	});
+
+	it('parses Atom entries that only expose an updated timestamp', () => {
+		const xml = `<feed xmlns="http://www.w3.org/2005/Atom"><title>A</title>
+  <entry><title>E</title><link href="https://example.com/e"/><updated>2024-03-03T00:00:00Z</updated></entry>
+</feed>`;
+
+		const item = parseFeedXml(xml, 'https://example.com').items[0];
+
+		expect(item.pubDate).toBe('2024-03-03T00:00:00Z');
+		expect(item.link).toBe('https://example.com/e');
+	});
+
+	it('does not set optional fields when they are absent', () => {
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title>Only</title><link>https://example.com/only</link></item>
+</channel></rss>`;
+
+		const item = parseFeedXml(xml, 'https://example.com').items[0];
+
+		expect(item).not.toHaveProperty('pubDate');
+		expect(item).not.toHaveProperty('description');
+	});
+
+	it('prefers the href of the first object link in an Atom link array', () => {
+		const xml = `<feed xmlns="http://www.w3.org/2005/Atom"><title>A</title>
+  <entry>
+    <title>E</title>
+    <link rel="alternate" href="https://example.com/alt"/>
+    <link rel="self" href="https://example.com/self"/>
+  </entry>
+</feed>`;
+
+		expect(parseFeedXml(xml, 'https://example.com').items[0].link).toBe('https://example.com/alt');
+	});
+
+	it('resolves a relative link against a base URL with a path', () => {
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title>A</title><link>post/1</link></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/blog/feed.xml').items[0].link).toBe(
+			'https://example.com/blog/post/1'
+		);
+	});
+
+	it('keeps an unresolvable relative link as-is instead of throwing', () => {
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title>A</title><link>post/1</link></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'not-a-valid-base').items[0].link).toBe('post/1');
+	});
+
+	it('reads a plain-string Atom link', () => {
+		const xml = `<feed xmlns="http://www.w3.org/2005/Atom"><title>A</title>
+  <entry><title>E</title><link>https://example.com/plain</link></entry>
+</feed>`;
+
+		expect(parseFeedXml(xml, 'https://example.com').items[0].link).toBe(
+			'https://example.com/plain'
+		);
+	});
+
+	it('falls back to an entry title when an item only has a nested title object', () => {
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title><![CDATA[Real Title]]></title><link>https://example.com/a</link></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com').items[0].title).toBe('Real Title');
+	});
+
+	it('prefers description over summary when both are present', () => {
+		const xml = `<feed xmlns="http://www.w3.org/2005/Atom"><title>A</title>
+  <entry><title>E</title><link href="https://example.com/e"/>
+    <summary>Summary text</summary><content>Content text</content></entry>
+</feed>`;
+
+		expect(parseFeedXml(xml, 'https://example.com').items[0].description).toBe('Summary text');
+	});
 });

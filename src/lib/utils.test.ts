@@ -20,6 +20,20 @@ describe('encodeFeedUrl', () => {
 	it('throws for invalid encoded input', () => {
 		expect(() => decodeFeedUrl('!not-base64!')).toThrow();
 	});
+
+	it('round-trips a URL containing non-ASCII characters', () => {
+		const url = 'https://例え.jp/フィード.xml?q=café';
+		expect(decodeFeedUrl(encodeFeedUrl(url))).toBe(url);
+	});
+
+	it('does not throw for non-Latin1 input (btoa would)', () => {
+		expect(() => encodeFeedUrl('https://例え.jp/feed')).not.toThrow();
+	});
+
+	it('round-trips an already punycode IDN host', () => {
+		const url = 'https://xn--r8jz45g.jp/feed';
+		expect(decodeFeedUrl(encodeFeedUrl(url))).toBe(url);
+	});
 });
 
 describe('normalizeUrl', () => {
@@ -57,5 +71,26 @@ describe('normalizeUrl', () => {
 
 	it('throws for a malformed scheme', () => {
 		expect(() => normalizeUrl('http://')).toThrow('Invalid URL format');
+	});
+
+	it('accepts an upper-case scheme without mangling the URL', () => {
+		const normalized = normalizeUrl('HTTP://example.com');
+		expect(normalized).not.toContain('https://http');
+		expect(new URL(normalized).hostname).toBe('example.com');
+	});
+
+	it('accepts a mixed-case https scheme', () => {
+		const normalized = normalizeUrl('HtTpS://example.com/feed');
+		expect(new URL(normalized).hostname).toBe('example.com');
+		expect(new URL(normalized).protocol).toBe('https:');
+	});
+
+	it('rejects non-http schemes instead of silently rewriting them', () => {
+		expect(() => normalizeUrl('ftp://example.com')).toThrow('Invalid URL format');
+		expect(() => normalizeUrl('file:///etc/passwd')).toThrow('Invalid URL format');
+	});
+
+	it('does not treat a domain starting with "http" as an existing scheme', () => {
+		expect(normalizeUrl('httpbin.org')).toBe('https://httpbin.org');
 	});
 });

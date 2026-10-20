@@ -27,15 +27,16 @@ interface RawFeed {
 
 function decodeEntities(text: string): string {
 	return text.replace(/&(#x?[0-9a-f]+|amp|lt|gt|quot|apos|#38);/gi, (match, entity: string) => {
-		if (entity === 'amp') return '&';
-		if (entity === 'lt') return '<';
-		if (entity === 'gt') return '>';
-		if (entity === 'quot') return '"';
-		if (entity === 'apos') return "'";
-		const code = entity.toLowerCase().startsWith('#x')
-			? parseInt(entity.slice(2), 16)
-			: parseInt(entity.slice(1), 10);
-		return isNaN(code) ? match : String.fromCharCode(code);
+		const name = entity.toLowerCase();
+		if (name === 'amp') return '&';
+		if (name === 'lt') return '<';
+		if (name === 'gt') return '>';
+		if (name === 'quot') return '"';
+		if (name === 'apos') return "'";
+		const code = name.startsWith('#x') ? parseInt(name.slice(2), 16) : parseInt(name.slice(1), 10);
+		// fromCharCode truncates above U+FFFF, so astral entities need fromCodePoint.
+		if (!Number.isInteger(code) || code < 0 || code > 0x10ffff) return match;
+		return String.fromCodePoint(code);
 	});
 }
 
