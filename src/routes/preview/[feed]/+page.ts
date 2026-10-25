@@ -1,4 +1,4 @@
-import { decodeFeedUrl } from '$lib/utils.js';
+import { decodeFeedUrl } from '#lib/utils.js';
 import { error } from '@sveltejs/kit';
 import type { PageLoad } from './$types';
 
