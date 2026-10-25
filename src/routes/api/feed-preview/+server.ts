@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { parseFeedXml } from '$lib/feedParser.js';
+import { parseFeedXml } from '#lib/feedParser.js';
 
 const USER_AGENT = 'rss-finder/2.0';
 const TIMEOUT_MS = 15000;
