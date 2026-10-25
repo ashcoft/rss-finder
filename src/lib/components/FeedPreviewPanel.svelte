@@ -1,6 +1,6 @@
 <script lang="ts">
-	import type { ParsedFeed } from '$lib/feedParser.js';
-	import { encodeFeedUrl } from '$lib/utils.js';
+	import type { ParsedFeed } from '#lib/feedParser.js';
+	import { encodeFeedUrl } from '#lib/utils.js';
 
 	interface Props {
 		feedUrl: string | null;

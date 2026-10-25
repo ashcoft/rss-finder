@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { normalizeUrl } from '$lib/utils.js';
-	import FeedPreviewPanel from '$lib/components/FeedPreviewPanel.svelte';
+	import { normalizeUrl } from '#lib/utils.js';
+	import FeedPreviewPanel from '#lib/components/FeedPreviewPanel.svelte';
 
 	let urlInput = $state('');
 	let isLoading = $state(false);

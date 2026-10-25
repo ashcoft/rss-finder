@@ -4,3 +4,6 @@ allowBuilds:
 
 overrides:
   cookie@<0.7.0: 0.7.2
+  # undici 7.29.1 carries three advisories (SRI bypass, DoS via stream error
+  # and EventSource memory exhaustion); 7.30.1 is the patched release.
+  undici@<7.30.1: 7.30.1

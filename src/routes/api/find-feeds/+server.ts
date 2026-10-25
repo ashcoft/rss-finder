@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { find } from 'feedfinder-ts';
-import { normalizeUrl } from '$lib/utils.js';
+import { normalizeUrl } from '#lib/utils.js';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ request }) => {

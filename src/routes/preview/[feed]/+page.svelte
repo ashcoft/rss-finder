@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { ParsedFeed } from '$lib/feedParser.js';
+	import type { ParsedFeed } from '#lib/feedParser.js';
 
 	let { data } = $props();
 
