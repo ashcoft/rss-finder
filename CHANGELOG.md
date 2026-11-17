@@ -1,3 +1,10 @@
+## [1.0.1](https://github.com/ashcoft/rss-finder/compare/v1.0.0...v1.0.1) (2026-11-17)
+
+
+### Bug Fixes
+
+* **deps:** bump fast-xml-parser to 5.12.1 to fix quadratic stop-node scan ([3fa07e6](https://github.com/ashcoft/rss-finder/commit/3fa07e6b7c72e8ffd290ae45951718ebda19bd86)), closes [#123](https://github.com/ashcoft/rss-finder/issues/123) [#124](https://github.com/ashcoft/rss-finder/issues/124)
+
 # 1.0.0 (2026-10-20)
 
 
