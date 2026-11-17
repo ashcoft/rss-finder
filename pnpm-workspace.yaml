@@ -4,6 +4,12 @@ allowBuilds:
 
 overrides:
   cookie@<0.7.0: 0.7.2
+  # minimatch >=7.0.0 <11.0.1 amplifies attacker-controlled glob patterns
+  # (globparts growth + quadratic second-phase processing, GHSA-g3hv-75wg-m249);
+  # 11.0.1 is the first patched release. Only the transitive 10.2.6 pulled in by
+  # @typescript-eslint/typescript-estree is in range — the 3.x copy eslint's glob
+  # uses is unaffected and stays put.
+  minimatch@>=7.0.0 <11.0.1: 11.0.1
   # undici 7.29.1 carries three advisories (SRI bypass, DoS via stream error
   # and EventSource memory exhaustion); 7.30.1 is the patched release.
   undici@<7.30.1: 7.30.1
