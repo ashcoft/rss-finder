@@ -1,0 +1,35 @@
+# CircleCI is connected to this repository, so a missing config makes the
+# "CircleCI Pipeline" status report "No configuration was found in your
+# project" and fail every branch. This mirrors the GitHub Actions `CI`
+# workflow (.github/workflows/ci.yml) so both providers run the same checks.
+version: 2.1
+
+jobs:
+  test:
+    docker:
+      - image: cimg/node:22.22
+    steps:
+      - checkout
+      - run:
+          name: Install pnpm
+          command: sudo corepack enable && corepack prepare pnpm@12.21.0 --activate
+      - run:
+          name: Install dependencies
+          command: pnpm install --frozen-lockfile
+      - run:
+          name: Type check
+          command: pnpm check
+      - run:
+          name: Lint
+          command: pnpm lint
+      - run:
+          name: Test
+          command: pnpm test
+      - run:
+          name: Build
+          command: pnpm build
+
+workflows:
+  ci:
+    jobs:
+      - test
