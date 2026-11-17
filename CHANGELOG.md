@@ -1,3 +1,10 @@
+## [1.0.2](https://github.com/ashcoft/rss-finder/compare/v1.0.1...v1.0.2) (2026-11-17)
+
+
+### Bug Fixes
+
+* **deps:** override transitive minimatch to 11.0.1 to fix globparts DoS ([d6cc6d2](https://github.com/ashcoft/rss-finder/commit/d6cc6d279d6d30183abf5a79095dba37c5656a2b))
+
 ## [1.0.1](https://github.com/ashcoft/rss-finder/compare/v1.0.0...v1.0.1) (2026-11-17)
 
 
