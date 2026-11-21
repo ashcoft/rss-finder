@@ -1,3 +1,13 @@
+## [1.1.1](https://github.com/ashcoft/rss-finder/compare/v1.1.0...v1.1.1) (2026-11-21)
+
+
+### Bug Fixes
+
+* decode markup entities and scan img attributes one at a time ([6d255d6](https://github.com/ashcoft/rss-finder/commit/6d255d6ab518c8ec1532d0738da2a235abdb424b))
+* quote-aware img tags and safe redirect base ([f922bb9](https://github.com/ashcoft/rss-finder/commit/f922bb9da5b852088d99039eeea5b7cdbd3260c2))
+* reject entity-encoded data: image sources ([ba7c214](https://github.com/ashcoft/rss-finder/commit/ba7c2149318ef097c658736c306b4e2fed736ed1)), closes [#100](https://github.com/ashcoft/rss-finder/issues/100)
+* tokenise img tags linearly and block private feed hosts ([23a9edc](https://github.com/ashcoft/rss-finder/commit/23a9edcbed07a35cbdb1c025664be668525534f2))
+
 # [1.1.0](https://github.com/ashcoft/rss-finder/compare/v1.0.2...v1.1.0) (2026-11-21)
 
 
