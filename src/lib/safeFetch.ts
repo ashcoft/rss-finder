@@ -16,18 +16,31 @@ export async function guardedFetch(
 	let current =
 		typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
 
+	// A Request carries its method, headers and abort signal; keep them across hops.
+	const requestInit: RequestInit =
+		input instanceof Request
+			? {
+					method: input.method,
+					headers: input.headers,
+					signal: input.signal,
+					mode: input.mode,
+					credentials: input.credentials,
+					...(init ?? {})
+				}
+			: { ...init };
+
 	assertFetchableUrl(current);
 
 	// A caller that asked for manual redirects is driving the loop itself (the preview
 	// route), so guard the destination and hand the response straight back.
 	if (init?.redirect === 'manual') {
-		return baseFetch(current, init);
+		return baseFetch(current, requestInit);
 	}
 
 	for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
 		assertFetchableUrl(current);
 
-		const response = await baseFetch(current, { ...init, redirect: 'manual' });
+		const response = await baseFetch(current, { ...requestInit, redirect: 'manual' });
 
 		if (response.status >= 300 && response.status < 400) {
 			// Release the redirect response so its body cannot hold the connection open.

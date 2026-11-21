@@ -223,8 +223,13 @@ const QUOTE_ENTITY_PATTERN = /^(&quot;|&apos;|&#0*34;|&#x0*22;|&#0*39;|&#x0*27;)
 function quoteDelimiterAt(html: string, index: number): string {
 	const char = html[index];
 	if (char === '"' || char === "'") return char;
-	const match = QUOTE_ENTITY_PATTERN.exec(html.slice(index, index + 8));
+	const match = QUOTE_ENTITY_PATTERN.exec(html.slice(index, index + 12));
 	return match ? match[0] : '';
+}
+
+// `&quot;` and `&#34;` are the same delimiter, so compare the character, not the spelling.
+function quoteCharacter(delimiter: string): string {
+	return delimiter === "'" || /apos|#0*39;|#x0*27;/i.test(delimiter) ? "'" : '"';
 }
 
 function scanImgTag(html: string, start: number): { src: string; end: number } {
@@ -254,20 +259,32 @@ function scanImgTag(html: string, start: number): { src: string; end: number } {
 
 			const open = quoteDelimiterAt(html, i);
 			if (open) {
-				const closing = open.toLowerCase();
+				// A literal delimiter closes only on the same literal character, so quote
+				// references inside it stay text. An escaped delimiter closes on either
+				// spelling of the same quote, since that is how escaped markup is written.
+				const entityOpen = open.length > 1;
+				const quote = quoteCharacter(open);
 				const valueStart = i + open.length;
 				let end = valueStart;
 				while (end < limit) {
 					const candidate = quoteDelimiterAt(html, end);
-					if (candidate && candidate.toLowerCase() === closing) break;
+					if (candidate && quoteCharacter(candidate) === quote) {
+						if (entityOpen || candidate.length === 1) break;
+					}
 					end += 1;
 				}
-				if (end >= limit) {
-					// The value never closed inside the cap, so it is not a usable URL.
+				if (end < limit) {
+					value = html.slice(valueStart, end);
+					i = end + quoteDelimiterAt(html, end).length;
+				} else if (entityOpen) {
+					// A reference with no closing partner is text in an unquoted value.
+					const plainStart = i;
+					while (i < limit && !/[\s>]/.test(html[i])) i += 1;
+					value = html.slice(plainStart, i);
+				} else {
+					// The literal value never closed inside the cap, so it is not usable.
 					return { src, end: limit };
 				}
-				value = html.slice(valueStart, end);
-				i = end + closing.length;
 			} else {
 				const valueStart = i;
 				while (i < limit && !/[\s>]/.test(html[i])) i += 1;

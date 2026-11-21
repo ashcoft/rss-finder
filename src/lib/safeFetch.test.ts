@@ -90,4 +90,19 @@ describe('withGuardedFetch', () => {
 		expect(response.status).toBe(302);
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 	});
+	it('keeps the method and headers of a Request input', async () => {
+		const fetchMock = mockFetch(new Response('ok'));
+
+		await guardedFetch(
+			new Request('https://example.com/feed', {
+				method: 'HEAD',
+				headers: { accept: 'application/rss+xml' }
+			})
+		);
+
+		expect(fetchMock).toHaveBeenCalledWith(
+			'https://example.com/feed',
+			expect.objectContaining({ method: 'HEAD', redirect: 'manual' })
+		);
+	});
 });

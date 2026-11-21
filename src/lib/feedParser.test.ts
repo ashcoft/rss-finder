@@ -689,4 +689,25 @@ describe('parseFeedXml', () => {
 			'https://example.com/real.jpg'
 		);
 	});
+	it('reads a src whose opening and closing quote use different references', () => {
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <description><![CDATA[&lt;img src=&quot;/photo.jpg&#34;&gt;]]></description></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0].image).toBe(
+			'https://example.com/photo.jpg'
+		);
+	});
+
+	it('reads padded quote references as delimiters', () => {
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <description><![CDATA[&lt;img alt=&#000034;see src=/decoy.png&#000034; src=&#000034;/real.jpg&#000034;&gt;]]></description></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0].image).toBe(
+			'https://example.com/real.jpg'
+		);
+	});
 });
