@@ -83,8 +83,9 @@ function resolveLink(link: string, baseUrl: string): string {
 }
 
 const IMAGE_URL_PATTERN = /\.(?:jpe?g|png|gif|webp|avif|svg)(?:[?#]|$)/i;
-// `\ssrc` rather than `\bsrc` so lazy-loading `data-src` attributes are not mistaken for src.
-const IMG_SRC_PATTERN = /<img\b[^>]*?\ssrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>`]+))/gi;
+const IMG_TAG_PATTERN = /<img\b([^>]*)>/gi;
+// Attributes are consumed whole, so `alt="… src=x"` cannot be mistaken for a src attribute.
+const ATTRIBUTE_PATTERN = /([a-z_:][-a-z0-9_:.]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>`]+))/gi;
 // Types that say nothing about the payload, so an image-looking URL still counts.
 const INCONCLUSIVE_TYPES = new Set(['', 'application/octet-stream', 'binary/octet-stream']);
 
@@ -125,7 +126,9 @@ function pickImageUrl(value: unknown): string {
 function isImage(value: unknown): boolean {
 	if (!value || typeof value !== 'object') return false;
 	const obj = value as Record<string, unknown>;
-	const type = typeof obj['@_type'] === 'string' ? obj['@_type'].toLowerCase() : '';
+	// `type` can carry parameters, e.g. `application/octet-stream; name="cover.jpg"`.
+	const type =
+		typeof obj['@_type'] === 'string' ? obj['@_type'].split(';')[0].trim().toLowerCase() : '';
 	const medium = typeof obj['@_medium'] === 'string' ? obj['@_medium'].toLowerCase() : '';
 
 	if (type.startsWith('image/') || medium === 'image') return true;
@@ -166,11 +169,20 @@ function pickFromMedia(value: unknown): string {
 	return '';
 }
 
+function imageSrc(tag: string): string {
+	for (const match of tag.matchAll(ATTRIBUTE_PATTERN)) {
+		if (match[1].toLowerCase() !== 'src') continue;
+		const src = (match[2] ?? match[3] ?? match[4] ?? '').trim();
+		if (src && !isDataUrl(src)) return src;
+	}
+	return '';
+}
+
 function firstImageInHtml(value: unknown): string {
 	const html = toText(value);
-	for (const match of html.matchAll(IMG_SRC_PATTERN)) {
-		const src = (match[1] ?? match[2] ?? match[3] ?? '').trim();
-		if (src && !isDataUrl(src)) return src;
+	for (const match of html.matchAll(IMG_TAG_PATTERN)) {
+		const src = imageSrc(match[1]);
+		if (src) return src;
 	}
 	return '';
 }
@@ -189,14 +201,15 @@ function findImgElement(value: unknown): string {
 	if (!value || typeof value !== 'object') return '';
 	const obj = value as Record<string, unknown>;
 
-	if (obj.img !== undefined) {
-		const url = pickImageUrl(obj.img);
-		if (url) return url;
-	}
-
-	for (const child of Object.values(obj)) {
-		const url = findImgElement(child);
-		if (url) return url;
+	// Walk children in document order so the first image wins, even when a nested
+	// subtree holds an earlier <img> than a direct sibling.
+	for (const [key, child] of Object.entries(obj)) {
+		if (key === 'img') {
+			const url = pickImageUrl(child);
+			if (url) return url;
+		}
+		const nested = findImgElement(child);
+		if (nested) return nested;
 	}
 	return '';
 }

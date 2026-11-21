@@ -485,4 +485,39 @@ describe('parseFeedXml', () => {
 			'https://example.com/xhtml.png'
 		);
 	});
+	it('does not read a src= inside quoted alt text', () => {
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <description><![CDATA[<img alt="see src=/decoy.png here" src="/photo.jpg">]]></description></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0].image).toBe(
+			'https://example.com/photo.jpg'
+		);
+	});
+
+	it('reads an enclosure typed with MIME parameters', () => {
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <enclosure url="https://example.com/cover.jpg" type="application/octet-stream; name=&quot;cover.jpg&quot;"/></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0].image).toBe(
+			'https://example.com/cover.jpg'
+		);
+	});
+
+	it('picks the first image in Atom xhtml document order', () => {
+		const xml = `<feed xmlns="http://www.w3.org/2005/Atom"><title>A</title>
+  <entry><title>E</title><link href="https://example.com/e"/>
+    <content type="xhtml">
+      <div xmlns="http://www.w3.org/1999/xhtml"><p><img src="https://example.com/first.png"/></p></div>
+      <img src="https://example.com/second.png"/>
+    </content></entry>
+</feed>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed').items[0].image).toBe(
+			'https://example.com/first.png'
+		);
+	});
 });
