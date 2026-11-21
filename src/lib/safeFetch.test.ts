@@ -71,7 +71,7 @@ describe('withGuardedFetch', () => {
 		vi.stubGlobal('fetch', original);
 
 		const seen = await withGuardedFetch(async () => {
-			await expect(fetch('http://127.0.0.1/')).rejects.toBeInstanceOf(BlockedUrlError);
+			await expect(fetch('https://127.0.0.1/')).rejects.toBeInstanceOf(BlockedUrlError);
 			return 'done';
 		});
 
