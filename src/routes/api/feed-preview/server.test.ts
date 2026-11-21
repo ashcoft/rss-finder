@@ -42,7 +42,7 @@ describe('GET /api/feed-preview', () => {
 			'https://example.com/feed.xml',
 			expect.objectContaining({
 				headers: expect.objectContaining({ 'User-Agent': 'rss-finder/2.0' }),
-				redirect: 'follow'
+				redirect: 'manual'
 			})
 		);
 	});
@@ -52,15 +52,78 @@ describe('GET /api/feed-preview', () => {
   <item><title>P</title><link>post/1</link>
     <description><![CDATA[<img src="images/a.jpg"/>]]></description></item>
 </channel></rss>`;
-		const response = new Response(feed, { status: 200 });
-		Object.defineProperty(response, 'url', { value: 'https://example.com/blog/feed.xml' });
-		vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response));
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce(
+				new Response(null, {
+					status: 301,
+					headers: { location: 'https://example.com/blog/feed.xml' }
+				})
+			)
+			.mockResolvedValueOnce(new Response(feed, { status: 200 }));
+		vi.stubGlobal('fetch', fetchMock);
 
 		const res = await GET(makeEvent('https://example.com/feed.xml'));
 		const body = await res.json();
 
+		expect(res.status).toBe(200);
+		expect(fetchMock).toHaveBeenNthCalledWith(
+			2,
+			'https://example.com/blog/feed.xml',
+			expect.objectContaining({ redirect: 'manual' })
+		);
 		expect(body.feed.items[0].link).toBe('https://example.com/blog/post/1');
 		expect(body.feed.items[0].image).toBe('https://example.com/blog/images/a.jpg');
+	});
+
+	it('rejects a redirect to a private address', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue(
+				new Response(null, {
+					status: 302,
+					headers: { location: 'http://169.254.169.254/latest/meta-data/' }
+				})
+			)
+		);
+
+		const res = await GET(makeEvent('https://example.com/feed.xml'));
+
+		expect(res.status).toBe(400);
+		await expect(res.json()).resolves.toEqual({ error: 'Feed URL host is not allowed' });
+	});
+
+	it('rejects a feed URL that points at a private address', async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+
+		const res = await GET(makeEvent('http://127.0.0.1/feed.xml'));
+
+		expect(res.status).toBe(400);
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	it('rejects a feed URL on a local hostname', async () => {
+		const res = await GET(makeEvent('http://localhost:8080/feed.xml'));
+
+		expect(res.status).toBe(400);
+		await expect(res.json()).resolves.toEqual({ error: 'Feed URL host is not allowed' });
+	});
+
+	it('stops after too many redirects', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi
+				.fn()
+				.mockResolvedValue(
+					new Response(null, { status: 302, headers: { location: 'https://example.com/loop.xml' } })
+				)
+		);
+
+		const res = await GET(makeEvent('https://example.com/feed.xml'));
+
+		expect(res.status).toBe(502);
+		await expect(res.json()).resolves.toEqual({ error: 'Too many redirects' });
 	});
 
 	it('returns 400 when the url parameter is missing', async () => {
