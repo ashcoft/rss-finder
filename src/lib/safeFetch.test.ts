@@ -140,4 +140,15 @@ describe('withGuardedFetch', () => {
 		expect(new Headers(firstInit.headers).get('authorization')).toBe('Bearer secret');
 		expect(new Headers(secondInit.headers).get('authorization')).toBeNull();
 	});
+
+	it('prefers an explicit init body over the Request body', async () => {
+		const fetchMock = mockFetch(new Response('ok'));
+
+		await guardedFetch(new Request('https://example.com/feed', { method: 'POST', body: 'old' }), {
+			body: 'new'
+		});
+
+		const init = fetchMock.mock.calls[0][1] as RequestInit;
+		expect(init.body).toBe('new');
+	});
 });

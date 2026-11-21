@@ -42,10 +42,11 @@ export async function guardedFetch(
 
 	// A body stream can only be read once, so it rides the first request only. A later hop
 	// of a 307/308 keeps the method but cannot resend the body.
-	const firstHopInit: RequestInit & { duplex?: string } =
-		input instanceof Request && input.body
-			? { ...requestInit, body: input.body, duplex: 'half' }
-			: requestInit;
+	// An explicit init.body wins over the Request's own body.
+	const body = init?.body ?? (input instanceof Request ? input.body : null);
+	const firstHopInit: RequestInit & { duplex?: string } = body
+		? { ...requestInit, body, duplex: 'half' }
+		: requestInit;
 
 	assertFetchableUrl(current);
 

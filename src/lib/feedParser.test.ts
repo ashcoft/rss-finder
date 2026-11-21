@@ -727,7 +727,7 @@ describe('parseFeedXml', () => {
 </channel></rss>`;
 
 		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0].image).toBe(
-			'https://example.com/photo.jpg?label=%22x'
+			'https://example.com/photo.jpg?label=&quot;x'
 		);
 	});
 
@@ -738,7 +738,7 @@ describe('parseFeedXml', () => {
 </channel></rss>`;
 
 		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0].image).toBe(
-			'https://example.com/photo.jpg?a=1&b=2'
+			'https://example.com/photo.jpg?a=1&amp;b=2'
 		);
 	});
 });
