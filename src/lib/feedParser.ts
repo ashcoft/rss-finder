@@ -5,6 +5,7 @@ export interface FeedItem {
 	link: string;
 	pubDate?: string;
 	description?: string;
+	image?: string;
 }
 
 export interface ParsedFeed {
@@ -81,6 +82,88 @@ function resolveLink(link: string, baseUrl: string): string {
 	}
 }
 
+const IMAGE_URL_PATTERN = /\.(?:jpe?g|png|gif|webp|avif|svg)(?:[?#]|$)/i;
+
+function pickImageUrl(value: unknown): string {
+	if (typeof value === 'string') return value.trim();
+
+	if (Array.isArray(value)) {
+		for (const entry of value) {
+			const url = pickImageUrl(entry);
+			if (url) return url;
+		}
+		return '';
+	}
+
+	if (value && typeof value === 'object') {
+		const obj = value as Record<string, unknown>;
+		// RSS enclosures and media:* elements put the URL in an attribute; Atom-style
+		// elements such as <itunes:image href="..."/> use href instead.
+		for (const key of ['@_url', '@_href']) {
+			const candidate = obj[key];
+			if (typeof candidate === 'string' && candidate.trim()) return candidate.trim();
+		}
+	}
+
+	return '';
+}
+
+function isImage(value: unknown): boolean {
+	if (!value || typeof value !== 'object') return false;
+	const obj = value as Record<string, unknown>;
+	const type = typeof obj['@_type'] === 'string' ? obj['@_type'] : '';
+	const medium = typeof obj['@_medium'] === 'string' ? obj['@_medium'] : '';
+	return (
+		type.startsWith('image/') || medium === 'image' || IMAGE_URL_PATTERN.test(pickImageUrl(obj))
+	);
+}
+
+function pickImage(value: unknown): string {
+	if (Array.isArray(value)) {
+		for (const entry of value) {
+			const url = pickImage(entry);
+			if (url) return url;
+		}
+		return '';
+	}
+	return isImage(value) ? pickImageUrl(value) : '';
+}
+
+function firstImageInHtml(value: unknown): string {
+	const html = toText(value);
+	const src = /<img\b[^>]*?\bsrc\s*=\s*["']([^"']+)["']/i.exec(html)?.[1]?.trim() ?? '';
+	return /^data:/i.test(src) ? '' : src;
+}
+
+function extractImage(
+	i: {
+		enclosure?: unknown;
+		thumbnail?: unknown;
+		image?: unknown;
+		content?: unknown;
+		encoded?: unknown;
+		description?: unknown;
+		summary?: unknown;
+		group?: { content?: unknown; thumbnail?: unknown };
+	},
+	baseUrl: string
+): string {
+	const enclosures =
+		i.enclosure === undefined ? [] : Array.isArray(i.enclosure) ? i.enclosure : [i.enclosure];
+
+	const image =
+		pickImage(enclosures) ||
+		pickImageUrl(i.thumbnail) ||
+		pickImageUrl(i.image) ||
+		pickImage(i.content) ||
+		pickImage(i.group?.content) ||
+		pickImageUrl(i.group?.thumbnail) ||
+		firstImageInHtml(i.encoded) ||
+		firstImageInHtml(i.description ?? i.summary ?? i.content);
+
+	return resolveLink(image, baseUrl);
+}
+
 function extractItem(item: unknown, baseUrl: string): FeedItem {
 	const i = (item ?? {}) as {
 		title?: unknown;
@@ -96,18 +179,24 @@ function extractItem(item: unknown, baseUrl: string): FeedItem {
 		'@_href'?: unknown;
 		guid?: unknown;
 		enclosure?: unknown;
+		thumbnail?: unknown;
+		image?: unknown;
+		encoded?: unknown;
+		group?: { content?: unknown; thumbnail?: unknown };
 	};
 
 	const link = resolveLink(extractLink(i.link), baseUrl);
 
 	const date = toText(i.pubDate ?? i.pubdate ?? i.updated ?? i.published ?? i.updated$);
 	const description = toText(i.description ?? i.summary ?? i.content);
+	const image = extractImage(i, baseUrl);
 
 	return {
 		title: toText(i.title) || 'Untitled',
 		link,
 		...(date ? { pubDate: date } : {}),
-		...(description ? { description } : {})
+		...(description ? { description } : {}),
+		...(image ? { image } : {})
 	};
 }
 

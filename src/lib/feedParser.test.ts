@@ -277,4 +277,87 @@ describe('parseFeedXml', () => {
 
 		expect(parseFeedXml(xml, 'https://example.com').items[0].description).toBe('Summary text');
 	});
+	it('reads an image enclosure as the item image', () => {
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <enclosure url="https://example.com/photo.jpg" type="image/jpeg" length="1234"/></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0].image).toBe(
+			'https://example.com/photo.jpg'
+		);
+	});
+
+	it('reads a media:thumbnail image', () => {
+		const xml = `<rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <media:thumbnail url="https://cdn.example.com/thumb.png" width="320" height="180"/></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0].image).toBe(
+			'https://cdn.example.com/thumb.png'
+		);
+	});
+
+	it('reads a media:content element marked as an image', () => {
+		const xml = `<rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <media:group><media:content url="https://cdn.example.com/hero" medium="image"/></media:group></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0].image).toBe(
+			'https://cdn.example.com/hero'
+		);
+	});
+
+	it('reads an itunes:image href', () => {
+		const xml = `<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <itunes:image href="https://example.com/cover.jpg"/></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0].image).toBe(
+			'https://example.com/cover.jpg'
+		);
+	});
+
+	it('falls back to the first img in content:encoded', () => {
+		const xml = `<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <content:encoded><![CDATA[<p>Intro</p><img src="https://example.com/inline.webp" alt="x"/>]]></content:encoded></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0].image).toBe(
+			'https://example.com/inline.webp'
+		);
+	});
+
+	it('resolves a relative img src in the description against the feed URL', () => {
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <description><![CDATA[<p><img src="/images/a.jpg"/></p>]]></description></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/blog/feed.xml').items[0].image).toBe(
+			'https://example.com/images/a.jpg'
+		);
+	});
+
+	it('ignores non-image enclosures', () => {
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <enclosure url="https://example.com/audio.mp3" type="audio/mpeg" length="1234"/></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0]).not.toHaveProperty('image');
+	});
+
+	it('ignores data: URI images in descriptions', () => {
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <description><![CDATA[<img src="data:image/gif;base64,R0lGOD"/>]]></description></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0]).not.toHaveProperty('image');
+	});
 });

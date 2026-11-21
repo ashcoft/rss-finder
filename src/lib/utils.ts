@@ -50,3 +50,8 @@ export function decodeFeedUrl(encoded: string): string {
 		return binary;
 	}
 }
+
+export function hideBrokenImage(event: Event): void {
+	const image = event.currentTarget as HTMLImageElement | null;
+	if (image) image.style.display = 'none';
+}
