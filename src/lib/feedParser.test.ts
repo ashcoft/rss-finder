@@ -720,4 +720,25 @@ describe('parseFeedXml', () => {
 			'https://example.com/real.jpg'
 		);
 	});
+	it('keeps the whole URL when escaped markup double-escapes an ampersand', () => {
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <description><![CDATA[&lt;img src=&quot;/photo.jpg?label=&amp;quot;x&quot;&gt;]]></description></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0].image).toBe(
+			'https://example.com/photo.jpg?label=%22x'
+		);
+	});
+
+	it('decodes a double-escaped query separator once per layer', () => {
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <description><![CDATA[&lt;img src=&quot;/photo.jpg?a=1&amp;amp;b=2&quot;&gt;]]></description></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0].image).toBe(
+			'https://example.com/photo.jpg?a=1&b=2'
+		);
+	});
 });

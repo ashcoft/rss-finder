@@ -122,8 +122,13 @@ function cleanMetadataUrl(value: string): string {
 }
 
 // Inline HTML is scanned before decoding, so its attribute values still hold references.
-function cleanHtmlUrl(value: string): string {
-	return stripControl(decodeEntities(value));
+// In escaped markup the author's references were escaped again (`&amp;quot;`), so a value
+// from that pass needs two rounds to reach the URL the browser would request.
+function cleanHtmlUrl(value: string, escaped = false): string {
+	let text = value;
+	const rounds = escaped ? 2 : 1;
+	for (let round = 0; round < rounds; round += 1) text = decodeEntities(text);
+	return stripControl(text);
 }
 
 function decodeMarkupEntities(text: string): string {
@@ -287,7 +292,7 @@ function scanImgTag(html: string, start: number, escaped: boolean): { src: strin
 
 		if (!src && name === 'src') {
 			// Quotes that arrived as character references end up inside an unquoted value.
-			const url = cleanHtmlUrl(value)
+			const url = cleanHtmlUrl(value, escaped)
 				.replace(/^"([^"]*)"$|^'([^']*)'$/, '$1$2')
 				.trim();
 			if (url && !isDataUrl(url)) src = url;

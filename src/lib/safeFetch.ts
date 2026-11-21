@@ -25,24 +25,30 @@ export async function guardedFetch(
 					signal: input.signal,
 					mode: input.mode,
 					credentials: input.credentials,
-					// A body cannot be replayed across hops, so it only rides the first request.
-					...(input.body ? { body: input.body, duplex: 'half' } : {}),
 					...(init ?? {})
 				}
 			: { ...init };
+
+	// A body stream can only be read once, so it rides the first request only. A later hop
+	// of a 307/308 keeps the method but cannot resend the body.
+	const firstHopInit: RequestInit & { duplex?: string } =
+		input instanceof Request && input.body
+			? { ...requestInit, body: input.body, duplex: 'half' }
+			: requestInit;
 
 	assertFetchableUrl(current);
 
 	// A caller that asked for manual redirects is driving the loop itself (the preview
 	// route), so guard the destination and hand the response straight back.
 	if (init?.redirect === 'manual') {
-		return baseFetch(current, requestInit);
+		return baseFetch(current, firstHopInit);
 	}
 
 	for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
 		assertFetchableUrl(current);
 
-		const response = await baseFetch(current, { ...requestInit, redirect: 'manual' });
+		const hopInit = hop === 0 ? firstHopInit : requestInit;
+		const response = await baseFetch(current, { ...hopInit, redirect: 'manual' });
 
 		if (response.status >= 300 && response.status < 400) {
 			// Release the redirect response so its body cannot hold the connection open.
