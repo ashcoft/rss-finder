@@ -5,6 +5,7 @@ export interface FeedItem {
 	link: string;
 	pubDate?: string;
 	description?: string;
+	image?: string;
 }
 
 export interface ParsedFeed {
@@ -81,6 +82,176 @@ function resolveLink(link: string, baseUrl: string): string {
 	}
 }
 
+const IMAGE_URL_PATTERN = /\.(?:jpe?g|png|gif|webp|avif|svg)(?:[?#]|$)/i;
+const IMG_TAG_PATTERN = /<img\b([^>]*)>/gi;
+// Attributes are consumed whole, so `alt="… src=x"` cannot be mistaken for a src attribute.
+const ATTRIBUTE_PATTERN = /([a-z_:][-a-z0-9_:.]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>`]+))/gi;
+// Types that say nothing about the payload, so an image-looking URL still counts.
+const INCONCLUSIVE_TYPES = new Set(['', 'application/octet-stream', 'binary/octet-stream']);
+
+function isDataUrl(url: string): boolean {
+	return /^data:/i.test(url);
+}
+
+function pickImageUrl(value: unknown): string {
+	if (typeof value === 'string') {
+		const url = value.trim();
+		return isDataUrl(url) ? '' : url;
+	}
+
+	if (Array.isArray(value)) {
+		for (const entry of value) {
+			const url = pickImageUrl(entry);
+			if (url) return url;
+		}
+		return '';
+	}
+
+	if (value && typeof value === 'object') {
+		const obj = value as Record<string, unknown>;
+		// RSS enclosures and media:* elements put the URL in an attribute; Atom-style
+		// elements such as <itunes:image href="..."/> and out-of-line <content src="..."/>
+		// use href/src instead.
+		for (const key of ['@_url', '@_href', '@_src']) {
+			const candidate = obj[key];
+			if (typeof candidate !== 'string') continue;
+			const url = candidate.trim();
+			if (url && !isDataUrl(url)) return url;
+		}
+	}
+
+	return '';
+}
+
+function isImage(value: unknown): boolean {
+	if (!value || typeof value !== 'object') return false;
+	const obj = value as Record<string, unknown>;
+	// `type` can carry parameters, e.g. `application/octet-stream; name="cover.jpg"`.
+	const type =
+		typeof obj['@_type'] === 'string' ? obj['@_type'].split(';')[0].trim().toLowerCase() : '';
+	const medium = typeof obj['@_medium'] === 'string' ? obj['@_medium'].toLowerCase() : '';
+
+	if (type.startsWith('image/') || medium === 'image') return true;
+	// An explicit audio/video/other medium wins over an image-looking file extension.
+	if (medium) return false;
+	return INCONCLUSIVE_TYPES.has(type) && IMAGE_URL_PATTERN.test(pickImageUrl(obj));
+}
+
+function mediaEntries(value: unknown): Array<Record<string, unknown>> {
+	if (Array.isArray(value)) return value.flatMap(mediaEntries);
+	return value && typeof value === 'object' ? [value as Record<string, unknown>] : [];
+}
+
+function childThumbnail(value: unknown): string {
+	for (const entry of mediaEntries(value)) {
+		const url = pickImageUrl(entry.thumbnail);
+		if (url) return url;
+	}
+	return '';
+}
+
+function pickImage(value: unknown): string {
+	if (Array.isArray(value)) {
+		for (const entry of value) {
+			const url = pickImage(entry);
+			if (url) return url;
+		}
+		return '';
+	}
+	return isImage(value) ? pickImageUrl(value) : '';
+}
+
+function pickFromMedia(value: unknown): string {
+	for (const entry of mediaEntries(value)) {
+		const url = pickImage(entry) || childThumbnail(entry);
+		if (url) return url;
+	}
+	return '';
+}
+
+function imageSrc(tag: string): string {
+	for (const match of tag.matchAll(ATTRIBUTE_PATTERN)) {
+		if (match[1].toLowerCase() !== 'src') continue;
+		const src = (match[2] ?? match[3] ?? match[4] ?? '').trim();
+		if (src && !isDataUrl(src)) return src;
+	}
+	return '';
+}
+
+function firstImageInHtml(value: unknown): string {
+	const html = toText(value);
+	for (const match of html.matchAll(IMG_TAG_PATTERN)) {
+		const src = imageSrc(match[1]);
+		if (src) return src;
+	}
+	return '';
+}
+
+// Atom xhtml content arrives as nested objects rather than markup, so walk the tree for an
+// <img> element when the text scan finds nothing.
+function findImgElement(value: unknown): string {
+	if (Array.isArray(value)) {
+		for (const entry of value) {
+			const url = findImgElement(entry);
+			if (url) return url;
+		}
+		return '';
+	}
+
+	if (!value || typeof value !== 'object') return '';
+	const obj = value as Record<string, unknown>;
+
+	// Walk children in document order so the first image wins, even when a nested
+	// subtree holds an earlier <img> than a direct sibling.
+	for (const [key, child] of Object.entries(obj)) {
+		if (key === 'img') {
+			const url = pickImageUrl(child);
+			if (url) return url;
+		}
+		const nested = findImgElement(child);
+		if (nested) return nested;
+	}
+	return '';
+}
+
+function extractImage(
+	i: {
+		link?: unknown;
+		enclosure?: unknown;
+		thumbnail?: unknown;
+		image?: unknown;
+		content?: unknown;
+		encoded?: unknown;
+		description?: unknown;
+		summary?: unknown;
+		group?: unknown;
+	},
+	baseUrl: string
+): string {
+	const enclosureLinks = mediaEntries(i.link).filter((entry) => entry['@_rel'] === 'enclosure');
+	const groups = mediaEntries(i.group);
+	const contents = [
+		...mediaEntries(i.content),
+		...groups.flatMap((group) => mediaEntries(group.content))
+	];
+
+	const image =
+		pickImage(enclosureLinks) ||
+		pickImage(i.enclosure) ||
+		pickImageUrl(i.thumbnail) ||
+		pickImageUrl(i.image) ||
+		pickFromMedia(contents) ||
+		pickFromMedia(groups) ||
+		firstImageInHtml(i.encoded) ||
+		firstImageInHtml(i.description) ||
+		firstImageInHtml(i.summary) ||
+		firstImageInHtml(i.content) ||
+		findImgElement(i.encoded) ||
+		findImgElement(i.content);
+
+	return resolveLink(image, baseUrl);
+}
+
 function extractItem(item: unknown, baseUrl: string): FeedItem {
 	const i = (item ?? {}) as {
 		title?: unknown;
@@ -96,18 +267,24 @@ function extractItem(item: unknown, baseUrl: string): FeedItem {
 		'@_href'?: unknown;
 		guid?: unknown;
 		enclosure?: unknown;
+		thumbnail?: unknown;
+		image?: unknown;
+		encoded?: unknown;
+		group?: unknown;
 	};
 
 	const link = resolveLink(extractLink(i.link), baseUrl);
 
 	const date = toText(i.pubDate ?? i.pubdate ?? i.updated ?? i.published ?? i.updated$);
 	const description = toText(i.description ?? i.summary ?? i.content);
+	const image = extractImage(i, baseUrl);
 
 	return {
 		title: toText(i.title) || 'Untitled',
 		link,
 		...(date ? { pubDate: date } : {}),
-		...(description ? { description } : {})
+		...(description ? { description } : {}),
+		...(image ? { image } : {})
 	};
 }
 

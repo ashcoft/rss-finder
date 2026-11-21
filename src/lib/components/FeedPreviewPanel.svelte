@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { ParsedFeed } from '#lib/feedParser.js';
-	import { encodeFeedUrl } from '#lib/utils.js';
+	import { encodeFeedUrl, hideBrokenImage } from '#lib/utils.js';
 
 	interface Props {
 		feedUrl: string | null;
@@ -205,30 +205,42 @@
 					</h3>
 					{#each visibleItems as item, index (index)}
 						<article
-							class="flex flex-col gap-2 rounded-lg border border-border bg-white p-3 hover:border-primary"
+							class="overflow-hidden rounded-lg border border-border bg-white hover:border-primary"
 						>
-							{#if item.link}
-								<a
-									href={item.link}
-									target="_blank"
-									rel="noopener noreferrer"
-									class="text-sm font-medium hover:text-primary"
-								>
-									{item.title}
-								</a>
-							{:else}
-								<span class="text-sm font-medium">{item.title}</span>
+							{#if item.image}
+								<img
+									src={item.image}
+									alt=""
+									loading="lazy"
+									referrerpolicy="no-referrer"
+									class="h-40 w-full bg-muted object-cover"
+									onerror={hideBrokenImage}
+								/>
 							{/if}
-							{#if item.pubDate}
-								<div class="text-xs text-muted-foreground">
-									<time datetime={item.pubDate}>{formatDate(item.pubDate)}</time>
-								</div>
-							{/if}
-							{#if item.description}
-								<p class="line-clamp-2 text-xs text-muted-foreground sm:text-sm">
-									{item.description}
-								</p>
-							{/if}
+							<div class="flex flex-col gap-2 p-3">
+								{#if item.link}
+									<a
+										href={item.link}
+										target="_blank"
+										rel="noopener noreferrer"
+										class="text-sm font-medium hover:text-primary"
+									>
+										{item.title}
+									</a>
+								{:else}
+									<span class="text-sm font-medium">{item.title}</span>
+								{/if}
+								{#if item.pubDate}
+									<div class="text-xs text-muted-foreground">
+										<time datetime={item.pubDate}>{formatDate(item.pubDate)}</time>
+									</div>
+								{/if}
+								{#if item.description}
+									<p class="line-clamp-2 text-xs text-muted-foreground sm:text-sm">
+										{item.description}
+									</p>
+								{/if}
+							</div>
 						</article>
 					{/each}
 

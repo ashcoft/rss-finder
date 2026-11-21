@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { ParsedFeed } from '#lib/feedParser.js';
+	import { hideBrokenImage } from '#lib/utils.js';
 
 	let { data } = $props();
 
@@ -165,35 +166,47 @@
 					</h2>
 					{#each visibleItems as item, index (index)}
 						<article
-							class="flex flex-col gap-2 rounded-lg border border-border bg-white p-3 hover:border-primary sm:p-4"
+							class="overflow-hidden rounded-lg border border-border bg-white hover:border-primary"
 						>
-							{#if item.link}
-								<a
-									href={item.link}
-									target="_blank"
-									rel="noopener noreferrer"
-									class="text-sm font-medium hover:text-primary sm:text-base"
-								>
-									{item.title}
-								</a>
-							{:else}
-								<span class="text-sm font-medium sm:text-base">{item.title}</span>
+							{#if item.image}
+								<img
+									src={item.image}
+									alt=""
+									loading="lazy"
+									referrerpolicy="no-referrer"
+									class="h-48 w-full bg-muted object-cover"
+									onerror={hideBrokenImage}
+								/>
 							{/if}
-							<div
-								class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground"
-							>
-								{#if item.pubDate}
-									<time datetime={item.pubDate}>{formatDate(item.pubDate)}</time>
-								{/if}
+							<div class="flex flex-col gap-2 p-3 sm:p-4">
 								{#if item.link}
-									<span class="break-all">{item.link}</span>
+									<a
+										href={item.link}
+										target="_blank"
+										rel="noopener noreferrer"
+										class="text-sm font-medium hover:text-primary sm:text-base"
+									>
+										{item.title}
+									</a>
+								{:else}
+									<span class="text-sm font-medium sm:text-base">{item.title}</span>
+								{/if}
+								<div
+									class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground"
+								>
+									{#if item.pubDate}
+										<time datetime={item.pubDate}>{formatDate(item.pubDate)}</time>
+									{/if}
+									{#if item.link}
+										<span class="break-all">{item.link}</span>
+									{/if}
+								</div>
+								{#if item.description}
+									<p class="line-clamp-2 text-xs text-muted-foreground sm:text-sm">
+										{item.description}
+									</p>
 								{/if}
 							</div>
-							{#if item.description}
-								<p class="line-clamp-2 text-xs text-muted-foreground sm:text-sm">
-									{item.description}
-								</p>
-							{/if}
 						</article>
 					{/each}
 

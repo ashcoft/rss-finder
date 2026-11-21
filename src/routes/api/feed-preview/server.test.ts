@@ -47,6 +47,22 @@ describe('GET /api/feed-preview', () => {
 		);
 	});
 
+	it('resolves relative item links and images against the final URL after a redirect', async () => {
+		const feed = `<rss version="2.0"><channel><title>Moved</title>
+  <item><title>P</title><link>post/1</link>
+    <description><![CDATA[<img src="images/a.jpg"/>]]></description></item>
+</channel></rss>`;
+		const response = new Response(feed, { status: 200 });
+		Object.defineProperty(response, 'url', { value: 'https://example.com/blog/feed.xml' });
+		vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response));
+
+		const res = await GET(makeEvent('https://example.com/feed.xml'));
+		const body = await res.json();
+
+		expect(body.feed.items[0].link).toBe('https://example.com/blog/post/1');
+		expect(body.feed.items[0].image).toBe('https://example.com/blog/images/a.jpg');
+	});
+
 	it('returns 400 when the url parameter is missing', async () => {
 		const response = await GET(makeEvent());
 
