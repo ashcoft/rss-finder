@@ -7,6 +7,17 @@ const MAX_REDIRECTS = 5;
 let originalFetch: typeof fetch | null = null;
 let guardDepth = 0;
 
+const SENSITIVE_HEADERS = ['authorization', 'cookie', 'proxy-authorization'];
+
+// A redirect to another origin must not carry the caller's credentials.
+function withoutSensitiveHeaders(init: RequestInit): RequestInit {
+	if (!init.headers) return init;
+
+	const headers = new Headers(init.headers);
+	for (const name of SENSITIVE_HEADERS) headers.delete(name);
+	return { ...init, headers };
+}
+
 /** Fetch that checks the destination of the request and of every redirect hop. */
 export async function guardedFetch(
 	input: RequestInfo | URL,
@@ -38,6 +49,8 @@ export async function guardedFetch(
 
 	assertFetchableUrl(current);
 
+	const origin = new URL(current).origin;
+
 	// A caller that asked for manual redirects is driving the loop itself (the preview
 	// route), so guard the destination and hand the response straight back.
 	if (init?.redirect === 'manual') {
@@ -48,7 +61,9 @@ export async function guardedFetch(
 		assertFetchableUrl(current);
 
 		const hopInit = hop === 0 ? firstHopInit : requestInit;
-		const response = await baseFetch(current, { ...hopInit, redirect: 'manual' });
+		const sameOrigin = new URL(current).origin === origin;
+		const guardedInit = sameOrigin ? hopInit : withoutSensitiveHeaders(hopInit);
+		const response = await baseFetch(current, { ...guardedInit, redirect: 'manual' });
 
 		if (response.status >= 300 && response.status < 400) {
 			// Release the redirect response so its body cannot hold the connection open.

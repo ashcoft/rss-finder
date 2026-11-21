@@ -124,4 +124,20 @@ describe('withGuardedFetch', () => {
 		expect(firstInit.body).toBeDefined();
 		expect(secondInit.body).toBeUndefined();
 	});
+	it('drops credentials when a redirect changes origin', async () => {
+		const fetchMock = mockFetch(
+			new Response(null, { status: 302, headers: { location: 'https://other.example/feed' } }),
+			new Response('ok', { status: 200 })
+		);
+
+		await guardedFetch('https://example.com/feed', {
+			headers: { authorization: 'Bearer secret' }
+		});
+
+		const firstInit = fetchMock.mock.calls[0][1] as RequestInit;
+		const secondInit = fetchMock.mock.calls[1][1] as RequestInit;
+
+		expect(new Headers(firstInit.headers).get('authorization')).toBe('Bearer secret');
+		expect(new Headers(secondInit.headers).get('authorization')).toBeNull();
+	});
 });
