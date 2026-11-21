@@ -97,19 +97,24 @@ function resolveLink(link: string, baseUrl: string): string {
 
 const IMAGE_URL_PATTERN = /\.(?:jpe?g|png|gif|webp|avif|svg)(?:[?#]|$)/i;
 const IMG_OPEN_PATTERN = /<img\b/gi;
-// One attribute at a time, or the end of the tag. Consuming attributes whole keeps
-// `alt="… src=x"` from being read as a src, and the `>` alternative only fires outside a
-// quoted value, so `<img src="…?a>b">` stays intact.
-const ATTRIBUTE_PATTERN =
-	/([a-z_:][-a-z0-9_:.]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>=`]+))|\s*\/?>/gi;
-// Only the references that build markup are decoded up front; quotes stay encoded so they
-// cannot shift attribute boundaries before the src value is extracted.
+// Real feeds do not contain megabyte-long tags; capping the per-tag scan keeps the whole
+// pass linear even for hostile input.
+const MAX_TAG_LENGTH = 4096;
+// References that build markup, used only when a feed escapes its own HTML.
 const MARKUP_ENTITY_PATTERN = /&(#x?[0-9a-f]+|lt|gt|amp);/gi;
 // Types that say nothing about the payload, so an image-looking URL still counts.
 const INCONCLUSIVE_TYPES = new Set(['', 'application/octet-stream', 'binary/octet-stream']);
 
 function isDataUrl(url: string): boolean {
 	return /^data:/i.test(url);
+}
+
+function cleanUrl(value: string): string {
+	// URL parsers drop tabs and newlines, so do the same before the scheme check:
+	// `d&#9;ata:` must not slip past it.
+	return decodeEntities(value)
+		.replace(/[\t\n\r\f]+/g, '')
+		.trim();
 }
 
 function decodeMarkupEntities(text: string): string {
@@ -128,7 +133,7 @@ function decodeMarkupEntities(text: string): string {
 
 function pickImageUrl(value: unknown): string {
 	if (typeof value === 'string') {
-		const url = value.trim();
+		const url = cleanUrl(value);
 		return isDataUrl(url) ? '' : url;
 	}
 
@@ -148,7 +153,7 @@ function pickImageUrl(value: unknown): string {
 		for (const key of ['@_url', '@_href', '@_src']) {
 			const candidate = obj[key];
 			if (typeof candidate !== 'string') continue;
-			const url = candidate.trim();
+			const url = cleanUrl(candidate);
 			if (url && !isDataUrl(url)) return url;
 		}
 	}
@@ -202,33 +207,79 @@ function pickFromMedia(value: unknown): string {
 	return '';
 }
 
-function imageSrcAt(html: string, start: number): string {
-	ATTRIBUTE_PATTERN.lastIndex = start;
+function scanImgTag(html: string, start: number): { src: string; end: number } {
+	const limit = Math.min(html.length, start + MAX_TAG_LENGTH);
+	let src = '';
+	let i = start;
+
+	while (i < limit) {
+		const char = html[i];
+
+		if (char === '>') return { src, end: i + 1 };
+		if (char === '/' || /\s/.test(char)) {
+			i += 1;
+			continue;
+		}
+
+		const nameStart = i;
+		while (i < limit && !/[\s=>/]/.test(html[i])) i += 1;
+		const name = html.slice(nameStart, i).toLowerCase();
+
+		while (i < limit && /\s/.test(html[i])) i += 1;
+
+		let value = '';
+		if (html[i] === '=') {
+			i += 1;
+			while (i < limit && /\s/.test(html[i])) i += 1;
+
+			const quote = html[i];
+			if (quote === '"' || quote === "'") {
+				const valueStart = ++i;
+				while (i < limit && html[i] !== quote) i += 1;
+				value = html.slice(valueStart, i);
+				i += 1;
+			} else {
+				const valueStart = i;
+				while (i < limit && !/[\s>]/.test(html[i])) i += 1;
+				value = html.slice(valueStart, i);
+			}
+		}
+
+		if (!src && name === 'src') {
+			// Quotes that arrived as character references end up inside an unquoted value.
+			const url = cleanUrl(value)
+				.replace(/^"([^"]*)"$|^'([^']*)'$/, '$1$2')
+				.trim();
+			if (url && !isDataUrl(url)) src = url;
+		}
+	}
+
+	return { src, end: limit };
+}
+
+function scanForImage(html: string): string {
+	IMG_OPEN_PATTERN.lastIndex = 0;
 
 	let match: RegExpExecArray | null;
-	while ((match = ATTRIBUTE_PATTERN.exec(html)) !== null) {
-		if (!match[1]) return '';
-
-		if (match[1].toLowerCase() !== 'src') continue;
-
-		// Decode before the scheme check, so an entity-encoded `&#100;ata:` is still rejected,
-		// and strip quotes that arrived as character references.
-		let src = decodeEntities(match[2] ?? match[3] ?? match[4] ?? '').trim();
-		const quoted = /^"([^"]*)"$|^'([^']*)'$/.exec(src);
-		if (quoted) src = (quoted[1] ?? quoted[2] ?? '').trim();
-		if (src && !isDataUrl(src)) return src;
+	while ((match = IMG_OPEN_PATTERN.exec(html)) !== null) {
+		const tag = scanImgTag(html, (match.index ?? 0) + match[0].length);
+		if (tag.src) return tag.src;
+		// Resume after the tag just consumed, so an `<img` inside its attributes is not a candidate.
+		IMG_OPEN_PATTERN.lastIndex = Math.max(IMG_OPEN_PATTERN.lastIndex, tag.end);
 	}
 
 	return '';
 }
 
 function firstImageInHtml(value: unknown): string {
-	const html = decodeMarkupEntities(rawText(value));
-	for (const match of html.matchAll(IMG_OPEN_PATTERN)) {
-		const src = imageSrcAt(html, (match.index ?? 0) + match[0].length);
-		if (src) return src;
-	}
-	return '';
+	const html = rawText(value);
+	const direct = scanForImage(html);
+	if (direct) return direct;
+
+	// Some feeds escape the markup itself (`&lt;img …&gt;` or numeric references). Only decode
+	// when the literal scan found nothing, so escaped examples cannot beat a real image.
+	const decoded = decodeMarkupEntities(html);
+	return decoded === html ? '' : scanForImage(decoded);
 }
 
 // Atom xhtml content arrives as nested objects rather than markup, so walk the tree for an
