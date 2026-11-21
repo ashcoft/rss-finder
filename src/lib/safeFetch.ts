@@ -7,6 +7,17 @@ const MAX_REDIRECTS = 5;
 let originalFetch: typeof fetch | null = null;
 let guardDepth = 0;
 
+const SENSITIVE_HEADERS = ['authorization', 'cookie', 'proxy-authorization'];
+
+// A redirect to another origin must not carry the caller's credentials.
+function withoutSensitiveHeaders(init: RequestInit): RequestInit {
+	if (!init.headers) return init;
+
+	const headers = new Headers(init.headers);
+	for (const name of SENSITIVE_HEADERS) headers.delete(name);
+	return { ...init, headers };
+}
+
 /** Fetch that checks the destination of the request and of every redirect hop. */
 export async function guardedFetch(
 	input: RequestInfo | URL,
@@ -17,7 +28,7 @@ export async function guardedFetch(
 		typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
 
 	// A Request carries its method, headers and abort signal; keep them across hops.
-	const requestInit: RequestInit =
+	const requestInit: RequestInit & { duplex?: string } =
 		input instanceof Request
 			? {
 					method: input.method,
@@ -29,18 +40,31 @@ export async function guardedFetch(
 				}
 			: { ...init };
 
+	// A body stream can only be read once, so it rides the first request only. A later hop
+	// of a 307/308 keeps the method but cannot resend the body.
+	// An explicit init.body wins over the Request's own body.
+	const body = init?.body ?? (input instanceof Request ? input.body : null);
+	const firstHopInit: RequestInit & { duplex?: string } = body
+		? { ...requestInit, body, duplex: 'half' }
+		: requestInit;
+
 	assertFetchableUrl(current);
+
+	const origin = new URL(current).origin;
 
 	// A caller that asked for manual redirects is driving the loop itself (the preview
 	// route), so guard the destination and hand the response straight back.
 	if (init?.redirect === 'manual') {
-		return baseFetch(current, requestInit);
+		return baseFetch(current, firstHopInit);
 	}
 
 	for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
 		assertFetchableUrl(current);
 
-		const response = await baseFetch(current, { ...requestInit, redirect: 'manual' });
+		const hopInit = hop === 0 ? firstHopInit : requestInit;
+		const sameOrigin = new URL(current).origin === origin;
+		const guardedInit = sameOrigin ? hopInit : withoutSensitiveHeaders(hopInit);
+		const response = await baseFetch(current, { ...guardedInit, redirect: 'manual' });
 
 		if (response.status >= 300 && response.status < 400) {
 			// Release the redirect response so its body cannot hold the connection open.

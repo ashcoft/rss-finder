@@ -104,5 +104,51 @@ describe('withGuardedFetch', () => {
 			'https://example.com/feed',
 			expect.objectContaining({ method: 'HEAD', redirect: 'manual' })
 		);
+
+		const init = fetchMock.mock.calls[0][1] as RequestInit;
+		expect(new Headers(init.headers).get('accept')).toBe('application/rss+xml');
+	});
+	it('sends a request body only on the first hop', async () => {
+		const fetchMock = mockFetch(
+			new Response(null, { status: 307, headers: { location: 'https://example.com/next' } }),
+			new Response('ok', { status: 200 })
+		);
+
+		await guardedFetch(
+			new Request('https://example.com/feed', { method: 'POST', body: 'payload' })
+		);
+
+		const firstInit = fetchMock.mock.calls[0][1] as RequestInit;
+		const secondInit = fetchMock.mock.calls[1][1] as RequestInit;
+
+		expect(firstInit.body).toBeDefined();
+		expect(secondInit.body).toBeUndefined();
+	});
+	it('drops credentials when a redirect changes origin', async () => {
+		const fetchMock = mockFetch(
+			new Response(null, { status: 302, headers: { location: 'https://other.example/feed' } }),
+			new Response('ok', { status: 200 })
+		);
+
+		await guardedFetch('https://example.com/feed', {
+			headers: { authorization: 'Bearer secret' }
+		});
+
+		const firstInit = fetchMock.mock.calls[0][1] as RequestInit;
+		const secondInit = fetchMock.mock.calls[1][1] as RequestInit;
+
+		expect(new Headers(firstInit.headers).get('authorization')).toBe('Bearer secret');
+		expect(new Headers(secondInit.headers).get('authorization')).toBeNull();
+	});
+
+	it('prefers an explicit init body over the Request body', async () => {
+		const fetchMock = mockFetch(new Response('ok'));
+
+		await guardedFetch(new Request('https://example.com/feed', { method: 'POST', body: 'old' }), {
+			body: 'new'
+		});
+
+		const init = fetchMock.mock.calls[0][1] as RequestInit;
+		expect(init.body).toBe('new');
 	});
 });
