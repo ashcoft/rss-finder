@@ -373,4 +373,116 @@ describe('parseFeedXml', () => {
 
 		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0]).not.toHaveProperty('image');
 	});
+	it('ignores a data: URI in image metadata', () => {
+		const xml = `<rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <media:content url="data:image/png;base64,iVBORw0KGgo=" medium="image"/></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0]).not.toHaveProperty('image');
+	});
+
+	it('reads an Atom link with rel="enclosure" as the item image', () => {
+		const xml = `<feed xmlns="http://www.w3.org/2005/Atom"><title>A</title>
+  <entry><title>E</title>
+    <link rel="alternate" href="https://example.com/e"/>
+    <link rel="enclosure" type="image/jpeg" href="https://example.com/photo.jpg"/></entry>
+</feed>`;
+
+		const item = parseFeedXml(xml, 'https://example.com/feed').items[0];
+
+		expect(item.link).toBe('https://example.com/e');
+		expect(item.image).toBe('https://example.com/photo.jpg');
+	});
+
+	it('matches an uppercase image MIME type', () => {
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <enclosure url="https://cdn.example.com/photo" type="IMAGE/JPEG"/></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0].image).toBe(
+			'https://cdn.example.com/photo'
+		);
+	});
+
+	it('ignores an audio enclosure whose URL looks like an image', () => {
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <enclosure url="https://example.com/episode.jpg" type="audio/mpeg"/></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0]).not.toHaveProperty('image');
+	});
+
+	it('reads an unquoted img src', () => {
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <description><![CDATA[<img src=/photo.jpg>]]></description></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0].image).toBe(
+			'https://example.com/photo.jpg'
+		);
+	});
+
+	it('uses src rather than a data-src placeholder', () => {
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <description><![CDATA[<img data-src="/placeholder.gif" src="/photo.jpg">]]></description></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0].image).toBe(
+			'https://example.com/photo.jpg'
+		);
+	});
+
+	it('skips a data: img and uses the next image in the HTML', () => {
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <description><![CDATA[<img src="data:image/gif;base64,R0lGOD"><img src="https://example.com/real.png">]]></description></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0].image).toBe(
+			'https://example.com/real.png'
+		);
+	});
+
+	it('reads a media:thumbnail nested in media:content', () => {
+		const xml = `<rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <media:content url="https://example.com/clip.mp4" type="video/mp4">
+      <media:thumbnail url="https://example.com/still.jpg"/>
+    </media:content></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0].image).toBe(
+			'https://example.com/still.jpg'
+		);
+	});
+
+	it('reads a thumbnail from any of several media:group elements', () => {
+		const xml = `<rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <media:group><media:content url="https://example.com/clip.mp4" type="video/mp4"/></media:group>
+    <media:group><media:thumbnail url="https://example.com/group.jpg"/></media:group></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0].image).toBe(
+			'https://example.com/group.jpg'
+		);
+	});
+
+	it('reads an img nested in Atom xhtml content', () => {
+		const xml = `<feed xmlns="http://www.w3.org/2005/Atom"><title>A</title>
+  <entry><title>E</title><link href="https://example.com/e"/>
+    <content type="xhtml">
+      <div xmlns="http://www.w3.org/1999/xhtml"><p>Intro</p><img src="https://example.com/xhtml.png"/></div>
+    </content></entry>
+</feed>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed').items[0].image).toBe(
+			'https://example.com/xhtml.png'
+		);
+	});
 });

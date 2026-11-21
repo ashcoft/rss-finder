@@ -83,9 +83,20 @@ function resolveLink(link: string, baseUrl: string): string {
 }
 
 const IMAGE_URL_PATTERN = /\.(?:jpe?g|png|gif|webp|avif|svg)(?:[?#]|$)/i;
+// `\ssrc` rather than `\bsrc` so lazy-loading `data-src` attributes are not mistaken for src.
+const IMG_SRC_PATTERN = /<img\b[^>]*?\ssrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>`]+))/gi;
+// Types that say nothing about the payload, so an image-looking URL still counts.
+const INCONCLUSIVE_TYPES = new Set(['', 'application/octet-stream', 'binary/octet-stream']);
+
+function isDataUrl(url: string): boolean {
+	return /^data:/i.test(url);
+}
 
 function pickImageUrl(value: unknown): string {
-	if (typeof value === 'string') return value.trim();
+	if (typeof value === 'string') {
+		const url = value.trim();
+		return isDataUrl(url) ? '' : url;
+	}
 
 	if (Array.isArray(value)) {
 		for (const entry of value) {
@@ -98,10 +109,13 @@ function pickImageUrl(value: unknown): string {
 	if (value && typeof value === 'object') {
 		const obj = value as Record<string, unknown>;
 		// RSS enclosures and media:* elements put the URL in an attribute; Atom-style
-		// elements such as <itunes:image href="..."/> use href instead.
-		for (const key of ['@_url', '@_href']) {
+		// elements such as <itunes:image href="..."/> and out-of-line <content src="..."/>
+		// use href/src instead.
+		for (const key of ['@_url', '@_href', '@_src']) {
 			const candidate = obj[key];
-			if (typeof candidate === 'string' && candidate.trim()) return candidate.trim();
+			if (typeof candidate !== 'string') continue;
+			const url = candidate.trim();
+			if (url && !isDataUrl(url)) return url;
 		}
 	}
 
@@ -111,11 +125,26 @@ function pickImageUrl(value: unknown): string {
 function isImage(value: unknown): boolean {
 	if (!value || typeof value !== 'object') return false;
 	const obj = value as Record<string, unknown>;
-	const type = typeof obj['@_type'] === 'string' ? obj['@_type'] : '';
-	const medium = typeof obj['@_medium'] === 'string' ? obj['@_medium'] : '';
-	return (
-		type.startsWith('image/') || medium === 'image' || IMAGE_URL_PATTERN.test(pickImageUrl(obj))
-	);
+	const type = typeof obj['@_type'] === 'string' ? obj['@_type'].toLowerCase() : '';
+	const medium = typeof obj['@_medium'] === 'string' ? obj['@_medium'].toLowerCase() : '';
+
+	if (type.startsWith('image/') || medium === 'image') return true;
+	// An explicit audio/video/other medium wins over an image-looking file extension.
+	if (medium) return false;
+	return INCONCLUSIVE_TYPES.has(type) && IMAGE_URL_PATTERN.test(pickImageUrl(obj));
+}
+
+function mediaEntries(value: unknown): Array<Record<string, unknown>> {
+	if (Array.isArray(value)) return value.flatMap(mediaEntries);
+	return value && typeof value === 'object' ? [value as Record<string, unknown>] : [];
+}
+
+function childThumbnail(value: unknown): string {
+	for (const entry of mediaEntries(value)) {
+		const url = pickImageUrl(entry.thumbnail);
+		if (url) return url;
+	}
+	return '';
 }
 
 function pickImage(value: unknown): string {
@@ -129,14 +158,52 @@ function pickImage(value: unknown): string {
 	return isImage(value) ? pickImageUrl(value) : '';
 }
 
+function pickFromMedia(value: unknown): string {
+	for (const entry of mediaEntries(value)) {
+		const url = pickImage(entry) || childThumbnail(entry);
+		if (url) return url;
+	}
+	return '';
+}
+
 function firstImageInHtml(value: unknown): string {
 	const html = toText(value);
-	const src = /<img\b[^>]*?\bsrc\s*=\s*["']([^"']+)["']/i.exec(html)?.[1]?.trim() ?? '';
-	return /^data:/i.test(src) ? '' : src;
+	for (const match of html.matchAll(IMG_SRC_PATTERN)) {
+		const src = (match[1] ?? match[2] ?? match[3] ?? '').trim();
+		if (src && !isDataUrl(src)) return src;
+	}
+	return '';
+}
+
+// Atom xhtml content arrives as nested objects rather than markup, so walk the tree for an
+// <img> element when the text scan finds nothing.
+function findImgElement(value: unknown): string {
+	if (Array.isArray(value)) {
+		for (const entry of value) {
+			const url = findImgElement(entry);
+			if (url) return url;
+		}
+		return '';
+	}
+
+	if (!value || typeof value !== 'object') return '';
+	const obj = value as Record<string, unknown>;
+
+	if (obj.img !== undefined) {
+		const url = pickImageUrl(obj.img);
+		if (url) return url;
+	}
+
+	for (const child of Object.values(obj)) {
+		const url = findImgElement(child);
+		if (url) return url;
+	}
+	return '';
 }
 
 function extractImage(
 	i: {
+		link?: unknown;
 		enclosure?: unknown;
 		thumbnail?: unknown;
 		image?: unknown;
@@ -144,24 +211,30 @@ function extractImage(
 		encoded?: unknown;
 		description?: unknown;
 		summary?: unknown;
-		group?: { content?: unknown; thumbnail?: unknown };
+		group?: unknown;
 	},
 	baseUrl: string
 ): string {
-	const enclosures =
-		i.enclosure === undefined ? [] : Array.isArray(i.enclosure) ? i.enclosure : [i.enclosure];
+	const enclosureLinks = mediaEntries(i.link).filter((entry) => entry['@_rel'] === 'enclosure');
+	const groups = mediaEntries(i.group);
+	const contents = [
+		...mediaEntries(i.content),
+		...groups.flatMap((group) => mediaEntries(group.content))
+	];
 
 	const image =
-		pickImage(enclosures) ||
+		pickImage(enclosureLinks) ||
+		pickImage(i.enclosure) ||
 		pickImageUrl(i.thumbnail) ||
 		pickImageUrl(i.image) ||
-		pickImage(i.content) ||
-		pickImage(i.group?.content) ||
-		pickImageUrl(i.group?.thumbnail) ||
+		pickFromMedia(contents) ||
+		pickFromMedia(groups) ||
 		firstImageInHtml(i.encoded) ||
 		firstImageInHtml(i.description) ||
 		firstImageInHtml(i.summary) ||
-		firstImageInHtml(i.content);
+		firstImageInHtml(i.content) ||
+		findImgElement(i.encoded) ||
+		findImgElement(i.content);
 
 	return resolveLink(image, baseUrl);
 }
@@ -184,7 +257,7 @@ function extractItem(item: unknown, baseUrl: string): FeedItem {
 		thumbnail?: unknown;
 		image?: unknown;
 		encoded?: unknown;
-		group?: { content?: unknown; thumbnail?: unknown };
+		group?: unknown;
 	};
 
 	const link = resolveLink(extractLink(i.link), baseUrl);

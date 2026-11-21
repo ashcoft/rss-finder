@@ -5,7 +5,7 @@ import { parseFeedXml } from '#lib/feedParser.js';
 const USER_AGENT = 'rss-finder/2.0';
 const TIMEOUT_MS = 15000;
 
-async function fetchFeedText(url: string): Promise<string> {
+async function fetchFeedText(url: string): Promise<{ xml: string; url: string }> {
 	const controller = new AbortController();
 	const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
 	try {
@@ -20,7 +20,8 @@ async function fetchFeedText(url: string): Promise<string> {
 		if (!response.ok) {
 			throw new Error(`Failed to fetch feed (${response.status})`);
 		}
-		return await response.text();
+		// Relative item links and images resolve against the final URL after redirects.
+		return { xml: await response.text(), url: response.url || url };
 	} finally {
 		clearTimeout(timeout);
 	}
@@ -48,8 +49,8 @@ export const GET: RequestHandler = async ({ url }) => {
 	}
 
 	try {
-		const xml = await fetchFeedText(feedUrl);
-		const feed = parseFeedXml(xml, feedUrl);
+		const { xml, url: baseUrl } = await fetchFeedText(feedUrl);
+		const feed = parseFeedXml(xml, baseUrl);
 		return json({ feed });
 	} catch (error) {
 		console.error('Error fetching feed preview:', error);
