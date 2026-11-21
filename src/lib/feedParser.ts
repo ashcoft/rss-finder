@@ -186,7 +186,8 @@ function pickFromMedia(value: unknown): string {
 function imageSrc(tag: string): string {
 	for (const match of tag.matchAll(ATTRIBUTE_PATTERN)) {
 		if (match[1].toLowerCase() !== 'src') continue;
-		const src = (match[2] ?? match[3] ?? match[4] ?? '').trim();
+		// Decode before the scheme check, so an entity-encoded `&#100;ata:` is still rejected.
+		const src = decodeEntities(match[2] ?? match[3] ?? match[4] ?? '').trim();
 		if (src && !isDataUrl(src)) return src;
 	}
 	return '';
@@ -198,7 +199,7 @@ function firstImageInHtml(value: unknown): string {
 	const html = rawText(value);
 	for (const match of html.matchAll(IMG_TAG_PATTERN)) {
 		const src = imageSrc(match[0]);
-		if (src) return decodeEntities(src);
+		if (src) return src;
 	}
 	return '';
 }

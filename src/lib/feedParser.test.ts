@@ -541,4 +541,14 @@ describe('parseFeedXml', () => {
 			'https://example.com/photo.jpg'
 		);
 	});
+	it('rejects an entity-encoded data: image and uses the next one', () => {
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <description><![CDATA[<img src="&#100;ata:image/gif;base64,R0lGOD"><img src="/photo.jpg">]]></description></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0].image).toBe(
+			'https://example.com/photo.jpg'
+		);
+	});
 });
