@@ -220,9 +220,10 @@ function pickFromMedia(value: unknown): string {
 // only opens a value; inside a value it is text.
 const QUOTE_ENTITY_PATTERN = /^(&quot;|&apos;|&#0*34;|&#x0*22;|&#0*39;|&#x0*27;)/i;
 
-function quoteDelimiterAt(html: string, index: number): string {
+function quoteDelimiterAt(html: string, index: number, allowEntities: boolean): string {
 	const char = html[index];
 	if (char === '"' || char === "'") return char;
+	if (!allowEntities) return '';
 	const match = QUOTE_ENTITY_PATTERN.exec(html.slice(index, index + 12));
 	return match ? match[0] : '';
 }
@@ -232,7 +233,7 @@ function quoteCharacter(delimiter: string): string {
 	return delimiter === "'" || /apos|#0*39;|#x0*27;/i.test(delimiter) ? "'" : '"';
 }
 
-function scanImgTag(html: string, start: number): { src: string; end: number } {
+function scanImgTag(html: string, start: number, escaped: boolean): { src: string; end: number } {
 	const limit = Math.min(html.length, start + MAX_TAG_LENGTH);
 	let src = '';
 	let i = start;
@@ -257,34 +258,28 @@ function scanImgTag(html: string, start: number): { src: string; end: number } {
 			i += 1;
 			while (i < limit && /\s/.test(html[i])) i += 1;
 
-			const open = quoteDelimiterAt(html, i);
+			const open = quoteDelimiterAt(html, i, escaped);
 			if (open) {
-				// A literal delimiter closes only on the same literal character, so quote
-				// references inside it stay text. An escaped delimiter closes on either
-				// spelling of the same quote, since that is how escaped markup is written.
+				// A literal delimiter closes only on a literal quote, so quote references
+				// inside it stay text; an escaped delimiter closes on either spelling,
+				// because `&quot;` and `&#34;` are the same quote.
 				const entityOpen = open.length > 1;
 				const quote = quoteCharacter(open);
 				const valueStart = i + open.length;
 				let end = valueStart;
 				while (end < limit) {
-					const candidate = quoteDelimiterAt(html, end);
+					const candidate = quoteDelimiterAt(html, end, escaped);
 					if (candidate && quoteCharacter(candidate) === quote) {
 						if (entityOpen || candidate.length === 1) break;
 					}
 					end += 1;
 				}
-				if (end < limit) {
-					value = html.slice(valueStart, end);
-					i = end + quoteDelimiterAt(html, end).length;
-				} else if (entityOpen) {
-					// A reference with no closing partner is text in an unquoted value.
-					const plainStart = i;
-					while (i < limit && !/[\s>]/.test(html[i])) i += 1;
-					value = html.slice(plainStart, i);
-				} else {
-					// The literal value never closed inside the cap, so it is not usable.
+				if (end >= limit) {
+					// The value never closed inside the cap, so it is not a usable URL.
 					return { src, end: limit };
 				}
+				value = html.slice(valueStart, end);
+				i = end + quoteDelimiterAt(html, end, escaped).length;
 			} else {
 				const valueStart = i;
 				while (i < limit && !/[\s>]/.test(html[i])) i += 1;
@@ -304,12 +299,12 @@ function scanImgTag(html: string, start: number): { src: string; end: number } {
 	return { src, end: limit };
 }
 
-function scanForImage(html: string): string {
+function scanForImage(html: string, escaped: boolean): string {
 	IMG_OPEN_PATTERN.lastIndex = 0;
 
 	let match: RegExpExecArray | null;
 	while ((match = IMG_OPEN_PATTERN.exec(html)) !== null) {
-		const tag = scanImgTag(html, (match.index ?? 0) + match[0].length);
+		const tag = scanImgTag(html, (match.index ?? 0) + match[0].length, escaped);
 		if (tag.src) return tag.src;
 		// Resume after the tag just consumed, so an `<img` inside its attributes is not a candidate.
 		IMG_OPEN_PATTERN.lastIndex = Math.max(IMG_OPEN_PATTERN.lastIndex, tag.end);
@@ -320,13 +315,15 @@ function scanForImage(html: string): string {
 
 function firstImageInHtml(value: unknown): string {
 	const html = rawText(value);
-	const direct = scanForImage(html);
+	// In literal markup a quote reference is text, so only real quotes delimit values.
+	const direct = scanForImage(html, false);
 	if (direct) return direct;
 
 	// Some feeds escape the markup itself (`&lt;img …&gt;` or numeric references). Only decode
-	// when the literal scan found nothing, so escaped examples cannot beat a real image.
+	// when the literal scan found nothing, so escaped examples cannot beat a real image; in
+	// that pass a quote reference is the author's delimiter.
 	const decoded = decodeMarkupEntities(html);
-	return decoded === html ? '' : scanForImage(decoded);
+	return decoded === html ? '' : scanForImage(decoded, true);
 }
 
 // Atom xhtml content arrives as nested objects rather than markup, so walk the tree for an

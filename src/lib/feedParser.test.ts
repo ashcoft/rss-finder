@@ -710,4 +710,14 @@ describe('parseFeedXml', () => {
 			'https://example.com/real.jpg'
 		);
 	});
+	it('keeps a real image when an escaped tag has text quote references', () => {
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <description><![CDATA[<img alt=&quot;x src="/real.jpg">]]></description></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0].image).toBe(
+			'https://example.com/real.jpg'
+		);
+	});
 });
