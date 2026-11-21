@@ -5,6 +5,14 @@ import { parseFeedXml } from '#lib/feedParser.js';
 const USER_AGENT = 'rss-finder/2.0';
 const TIMEOUT_MS = 15000;
 
+function httpUrlOr(candidate: string, fallback: string): string {
+	try {
+		return /^https?:$/.test(new URL(candidate).protocol) ? candidate : fallback;
+	} catch {
+		return fallback;
+	}
+}
+
 async function fetchFeedText(url: string): Promise<{ xml: string; url: string }> {
 	const controller = new AbortController();
 	const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -20,8 +28,9 @@ async function fetchFeedText(url: string): Promise<{ xml: string; url: string }>
 		if (!response.ok) {
 			throw new Error(`Failed to fetch feed (${response.status})`);
 		}
-		// Relative item links and images resolve against the final URL after redirects.
-		return { xml: await response.text(), url: response.url || url };
+		// Relative item links and images resolve against the final URL after redirects, but only
+		// when the redirect stayed on http(s); anything else falls back to the requested URL.
+		return { xml: await response.text(), url: httpUrlOr(response.url, url) };
 	} finally {
 		clearTimeout(timeout);
 	}
