@@ -159,7 +159,9 @@ function extractImage(
 		pickImage(i.group?.content) ||
 		pickImageUrl(i.group?.thumbnail) ||
 		firstImageInHtml(i.encoded) ||
-		firstImageInHtml(i.description ?? i.summary ?? i.content);
+		firstImageInHtml(i.description) ||
+		firstImageInHtml(i.summary) ||
+		firstImageInHtml(i.content);
 
 	return resolveLink(image, baseUrl);
 }

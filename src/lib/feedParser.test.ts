@@ -343,6 +343,19 @@ describe('parseFeedXml', () => {
 		);
 	});
 
+	it('reads an image from content when the summary is plain text', () => {
+		const xml = `<feed xmlns="http://www.w3.org/2005/Atom"><title>A</title>
+  <entry><title>E</title><link href="https://example.com/e"/>
+    <summary>Plain summary without markup</summary>
+    <content type="html">&lt;img src="https://example.com/from-content.png"/&gt;</content></entry>
+</feed>`;
+
+		const item = parseFeedXml(xml, 'https://example.com/feed').items[0];
+
+		expect(item.description).toBe('Plain summary without markup');
+		expect(item.image).toBe('https://example.com/from-content.png');
+	});
+
 	it('ignores non-image enclosures', () => {
 		const xml = `<rss version="2.0"><channel><title>T</title>
   <item><title>A</title><link>https://example.com/a</link>
