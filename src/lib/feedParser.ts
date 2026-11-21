@@ -56,6 +56,19 @@ function toText(value: unknown): string {
 	return decodeEntities(text);
 }
 
+function rawText(value: unknown): string {
+	if (typeof value === 'string') return value;
+	if (value && typeof value === 'object') {
+		const obj = value as Record<string, unknown>;
+		if (typeof obj['#text'] === 'string') return obj['#text'];
+		if (typeof obj['@_href'] === 'string') return obj['@_href'];
+		if (typeof obj.title === 'string') return obj.title;
+		if (typeof obj.title === 'object') return rawText(obj.title);
+		if (typeof obj.content === 'string') return obj.content;
+	}
+	return '';
+}
+
 function extractLink(link: unknown): string {
 	if (typeof link === 'string') return link;
 
@@ -83,7 +96,8 @@ function resolveLink(link: string, baseUrl: string): string {
 }
 
 const IMAGE_URL_PATTERN = /\.(?:jpe?g|png|gif|webp|avif|svg)(?:[?#]|$)/i;
-const IMG_TAG_PATTERN = /<img\b([^>]*)>/gi;
+// Quote-aware tag matching, so a `>` inside a quoted attribute value does not end the tag.
+const IMG_TAG_PATTERN = /<img\b(?:[^>"']|"[^"]*"|'[^']*')*>/gi;
 // Attributes are consumed whole, so `alt="… src=x"` cannot be mistaken for a src attribute.
 const ATTRIBUTE_PATTERN = /([a-z_:][-a-z0-9_:.]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>`]+))/gi;
 // Types that say nothing about the payload, so an image-looking URL still counts.
@@ -179,10 +193,12 @@ function imageSrc(tag: string): string {
 }
 
 function firstImageInHtml(value: unknown): string {
-	const html = toText(value);
+	// Scan before entity decoding so `&quot;` inside alt text cannot break the attribute
+	// structure, then decode the URL that was found.
+	const html = rawText(value);
 	for (const match of html.matchAll(IMG_TAG_PATTERN)) {
-		const src = imageSrc(match[1]);
-		if (src) return src;
+		const src = imageSrc(match[0]);
+		if (src) return decodeEntities(src);
 	}
 	return '';
 }
