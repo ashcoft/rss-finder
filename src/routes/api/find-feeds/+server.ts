@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import { find } from 'feedfinder-ts';
 import { normalizeUrl } from '#lib/utils.js';
 import { assertFetchableUrl, BlockedUrlError } from '#lib/urlGuard.js';
+import { withGuardedFetch } from '#lib/safeFetch.js';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ request }) => {
@@ -34,9 +35,12 @@ export const POST: RequestHandler = async ({ request }) => {
 	}
 
 	try {
-		const feeds = await find(normalizedUrl, {
-			userAgent: 'rss-finder/2.0'
-		});
+		// feedfinder-ts follows redirects with the global fetch, so guard it while it runs.
+		const feeds = await withGuardedFetch(() =>
+			find(normalizedUrl, {
+				userAgent: 'rss-finder/2.0'
+			})
+		);
 
 		return json({ feeds });
 	} catch (error) {

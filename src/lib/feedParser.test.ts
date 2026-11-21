@@ -667,4 +667,57 @@ describe('parseFeedXml', () => {
 
 		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0]).not.toHaveProperty('image');
 	});
+
+	it('reads escaped markup whose attribute quotes are encoded too', () => {
+		// CDATA keeps the escaped references intact, so the fallback pass has to decode them.
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <description><![CDATA[&lt;img alt=&quot;see src=/decoy.png here&quot; src=&quot;/real.jpg&quot;&gt;]]></description></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0].image).toBe(
+			'https://example.com/real.jpg'
+		);
+	});
+	it('keeps quote entities inside a literally quoted attribute', () => {
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <description><![CDATA[&lt;img alt="say &quot; src=/decoy.png &quot;" src="/real.jpg"&gt;]]></description></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0].image).toBe(
+			'https://example.com/real.jpg'
+		);
+	});
+	it('reads a src whose opening and closing quote use different references', () => {
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <description><![CDATA[&lt;img src=&quot;/photo.jpg&#34;&gt;]]></description></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0].image).toBe(
+			'https://example.com/photo.jpg'
+		);
+	});
+
+	it('reads padded quote references as delimiters', () => {
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <description><![CDATA[&lt;img alt=&#000034;see src=/decoy.png&#000034; src=&#000034;/real.jpg&#000034;&gt;]]></description></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0].image).toBe(
+			'https://example.com/real.jpg'
+		);
+	});
+	it('keeps a real image when an escaped tag has text quote references', () => {
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <description><![CDATA[<img alt=&quot;x src="/real.jpg">]]></description></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0].image).toBe(
+			'https://example.com/real.jpg'
+		);
+	});
 });
