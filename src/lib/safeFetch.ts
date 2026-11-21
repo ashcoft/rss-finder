@@ -1,0 +1,59 @@
+import { assertFetchableUrl } from './urlGuard.js';
+
+const MAX_REDIRECTS = 5;
+
+// `feedfinder-ts` calls the global fetch and follows redirects itself, so discovery is run
+// with a guarded wrapper installed for its duration.
+let originalFetch: typeof fetch | null = null;
+let guardDepth = 0;
+
+/** Fetch that checks the destination of the request and of every redirect hop. */
+export async function guardedFetch(
+	input: RequestInfo | URL,
+	init?: RequestInit,
+	baseFetch: typeof fetch = globalThis.fetch
+): Promise<Response> {
+	let current =
+		typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+
+	for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
+		assertFetchableUrl(current);
+
+		const response = await baseFetch(current, { ...init, redirect: 'manual' });
+
+		if (response.status >= 300 && response.status < 400) {
+			// Release the redirect response so its body cannot hold the connection open.
+			await response.body?.cancel();
+			const location = response.headers.get('location');
+			if (!location) return response;
+			current = assertFetchableUrl(location, current).toString();
+			continue;
+		}
+
+		return response;
+	}
+
+	throw new Error('Too many redirects');
+}
+
+const guardWrapper: typeof fetch = (input, init) =>
+	guardedFetch(input, init, originalFetch ?? globalThis.fetch);
+
+/** Run `task` with `globalThis.fetch` guarded, restoring it afterwards. */
+export async function withGuardedFetch<T>(task: () => Promise<T>): Promise<T> {
+	if (guardDepth === 0) {
+		originalFetch = globalThis.fetch;
+		globalThis.fetch = guardWrapper;
+	}
+	guardDepth += 1;
+
+	try {
+		return await task();
+	} finally {
+		guardDepth -= 1;
+		if (guardDepth === 0 && originalFetch) {
+			globalThis.fetch = originalFetch;
+			originalFetch = null;
+		}
+	}
+}
