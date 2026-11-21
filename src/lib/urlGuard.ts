@@ -46,7 +46,9 @@ function isPrivateIpv6(host: string): boolean {
 		host === '::' ||
 		host === '::1' ||
 		/^f[cd][0-9a-f]{2}:/.test(host) ||
-		/^fe[89ab][0-9a-f]:/.test(host)
+		/^fe[89ab][0-9a-f]:/.test(host) ||
+		/^fe[c-f][0-9a-f]:/.test(host) || // deprecated site local
+		/^ff[0-9a-f]{2}:/.test(host) // multicast
 	);
 }
 

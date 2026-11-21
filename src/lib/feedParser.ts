@@ -101,7 +101,7 @@ const IMG_OPEN_PATTERN = /<img\b/gi;
 // pass linear even for hostile input.
 const MAX_TAG_LENGTH = 4096;
 // References that build markup, used only when a feed escapes its own HTML.
-const MARKUP_ENTITY_PATTERN = /&(#x?[0-9a-f]+|lt|gt|amp|quot|apos);/gi;
+const MARKUP_ENTITY_PATTERN = /&(#x?[0-9a-f]+|lt|gt|amp);/gi;
 // Types that say nothing about the payload, so an image-looking URL still counts.
 const INCONCLUSIVE_TYPES = new Set(['', 'application/octet-stream', 'binary/octet-stream']);
 
@@ -132,14 +132,10 @@ function decodeMarkupEntities(text: string): string {
 		if (name === 'lt') return '<';
 		if (name === 'gt') return '>';
 		if (name === 'amp') return '&';
-		if (name === 'quot') return '"';
-		if (name === 'apos') return "'";
 		const code = name.startsWith('#x') ? parseInt(name.slice(2), 16) : parseInt(name.slice(1), 10);
 		if (code === 0x3c) return '<';
 		if (code === 0x3e) return '>';
 		if (code === 0x26) return '&';
-		if (code === 0x22) return '"';
-		if (code === 0x27) return "'";
 		return match;
 	});
 }
@@ -220,6 +216,17 @@ function pickFromMedia(value: unknown): string {
 	return '';
 }
 
+// A quote delimiter may arrive literally or as a character reference, and either form
+// only opens a value; inside a value it is text.
+const QUOTE_ENTITY_PATTERN = /^(&quot;|&apos;|&#0*34;|&#x0*22;|&#0*39;|&#x0*27;)/i;
+
+function quoteDelimiterAt(html: string, index: number): string {
+	const char = html[index];
+	if (char === '"' || char === "'") return char;
+	const match = QUOTE_ENTITY_PATTERN.exec(html.slice(index, index + 8));
+	return match ? match[0] : '';
+}
+
 function scanImgTag(html: string, start: number): { src: string; end: number } {
 	const limit = Math.min(html.length, start + MAX_TAG_LENGTH);
 	let src = '';
@@ -245,16 +252,22 @@ function scanImgTag(html: string, start: number): { src: string; end: number } {
 			i += 1;
 			while (i < limit && /\s/.test(html[i])) i += 1;
 
-			const quote = html[i];
-			if (quote === '"' || quote === "'") {
-				const valueStart = ++i;
-				while (i < limit && html[i] !== quote) i += 1;
-				if (i >= limit) {
+			const open = quoteDelimiterAt(html, i);
+			if (open) {
+				const closing = open.toLowerCase();
+				const valueStart = i + open.length;
+				let end = valueStart;
+				while (end < limit) {
+					const candidate = quoteDelimiterAt(html, end);
+					if (candidate && candidate.toLowerCase() === closing) break;
+					end += 1;
+				}
+				if (end >= limit) {
 					// The value never closed inside the cap, so it is not a usable URL.
 					return { src, end: limit };
 				}
-				value = html.slice(valueStart, i);
-				i += 1;
+				value = html.slice(valueStart, end);
+				i = end + closing.length;
 			} else {
 				const valueStart = i;
 				while (i < limit && !/[\s>]/.test(html[i])) i += 1;

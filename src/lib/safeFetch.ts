@@ -16,6 +16,14 @@ export async function guardedFetch(
 	let current =
 		typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
 
+	assertFetchableUrl(current);
+
+	// A caller that asked for manual redirects is driving the loop itself (the preview
+	// route), so guard the destination and hand the response straight back.
+	if (init?.redirect === 'manual') {
+		return baseFetch(current, init);
+	}
+
 	for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
 		assertFetchableUrl(current);
 
@@ -23,7 +31,11 @@ export async function guardedFetch(
 
 		if (response.status >= 300 && response.status < 400) {
 			// Release the redirect response so its body cannot hold the connection open.
-			await response.body?.cancel();
+			try {
+				await response.body?.cancel();
+			} catch {
+				// An already-errored stream needs no cleanup.
+			}
 			const location = response.headers.get('location');
 			if (!location) return response;
 			current = assertFetchableUrl(location, current).toString();

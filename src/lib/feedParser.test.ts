@@ -669,9 +669,20 @@ describe('parseFeedXml', () => {
 	});
 
 	it('reads escaped markup whose attribute quotes are encoded too', () => {
+		// CDATA keeps the escaped references intact, so the fallback pass has to decode them.
 		const xml = `<rss version="2.0"><channel><title>T</title>
   <item><title>A</title><link>https://example.com/a</link>
-    <description>&lt;img alt=&quot;see src=/decoy.png here&quot; src=&quot;/real.jpg&quot;&gt;</description></item>
+    <description><![CDATA[&lt;img alt=&quot;see src=/decoy.png here&quot; src=&quot;/real.jpg&quot;&gt;]]></description></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0].image).toBe(
+			'https://example.com/real.jpg'
+		);
+	});
+	it('keeps quote entities inside a literally quoted attribute', () => {
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <description><![CDATA[&lt;img alt="say &quot; src=/decoy.png &quot;" src="/real.jpg"&gt;]]></description></item>
 </channel></rss>`;
 
 		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0].image).toBe(

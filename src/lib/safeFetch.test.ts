@@ -79,4 +79,15 @@ describe('withGuardedFetch', () => {
 		expect(globalThis.fetch).toBe(original);
 		expect(original).not.toHaveBeenCalled();
 	});
+
+	it('leaves a caller that asked for manual redirects alone', async () => {
+		const fetchMock = mockFetch(
+			new Response(null, { status: 302, headers: { location: 'https://example.com/next' } })
+		);
+
+		const response = await guardedFetch('https://example.com/feed', { redirect: 'manual' });
+
+		expect(response.status).toBe(302);
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+	});
 });

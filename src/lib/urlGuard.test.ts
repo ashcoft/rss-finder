@@ -21,7 +21,9 @@ describe('isBlockedHost', () => {
 		'fe80::1',
 		'::ffff:127.0.0.1',
 		'::ffff:7f00:1',
-		'::ffff:a00:1'
+		'::ffff:a00:1',
+		'ff02::1',
+		'fec0::1'
 	])('blocks %s', (host) => {
 		expect(isBlockedHost(host)).toBe(true);
 	});
