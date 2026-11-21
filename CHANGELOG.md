@@ -1,3 +1,17 @@
+# [1.1.0](https://github.com/ashcoft/rss-finder/compare/v1.0.2...v1.1.0) (2026-11-21)
+
+
+### Bug Fixes
+
+* check each HTML field separately for a feed item image ([faada96](https://github.com/ashcoft/rss-finder/commit/faada9644f6e04461fbf6d3fc981c6c4a2a005cb))
+* harden feed image extraction ([1f3da38](https://github.com/ashcoft/rss-finder/commit/1f3da3884ffd16d972fa924a3e02180b7fb0a2d6))
+* parse img attributes and MIME parameters correctly ([a0318d9](https://github.com/ashcoft/rss-finder/commit/a0318d965e7bfd659561fba6fb18a69be856d5b3))
+
+
+### Features
+
+* show item images in feed preview ([d570887](https://github.com/ashcoft/rss-finder/commit/d5708878c1130c0bc9035b252f3d6a5551c7253c))
+
 ## [1.0.2](https://github.com/ashcoft/rss-finder/compare/v1.0.1...v1.0.2) (2026-11-17)
 
 
