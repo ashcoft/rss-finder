@@ -17,7 +17,7 @@ export async function guardedFetch(
 		typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
 
 	// A Request carries its method, headers and abort signal; keep them across hops.
-	const requestInit: RequestInit =
+	const requestInit: RequestInit & { duplex?: string } =
 		input instanceof Request
 			? {
 					method: input.method,
@@ -25,6 +25,8 @@ export async function guardedFetch(
 					signal: input.signal,
 					mode: input.mode,
 					credentials: input.credentials,
+					// A body cannot be replayed across hops, so it only rides the first request.
+					...(input.body ? { body: input.body, duplex: 'half' } : {}),
 					...(init ?? {})
 				}
 			: { ...init };

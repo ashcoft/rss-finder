@@ -101,7 +101,7 @@ const IMG_OPEN_PATTERN = /<img\b/gi;
 // pass linear even for hostile input.
 const MAX_TAG_LENGTH = 4096;
 // References that build markup, used only when a feed escapes its own HTML.
-const MARKUP_ENTITY_PATTERN = /&(#x?[0-9a-f]+|lt|gt|amp);/gi;
+const MARKUP_ENTITY_PATTERN = /&(#x?[0-9a-f]+|lt|gt);/gi;
 // Types that say nothing about the payload, so an image-looking URL still counts.
 const INCONCLUSIVE_TYPES = new Set(['', 'application/octet-stream', 'binary/octet-stream']);
 
@@ -131,11 +131,9 @@ function decodeMarkupEntities(text: string): string {
 		const name = entity.toLowerCase();
 		if (name === 'lt') return '<';
 		if (name === 'gt') return '>';
-		if (name === 'amp') return '&';
 		const code = name.startsWith('#x') ? parseInt(name.slice(2), 16) : parseInt(name.slice(1), 10);
 		if (code === 0x3c) return '<';
 		if (code === 0x3e) return '>';
-		if (code === 0x26) return '&';
 		return match;
 	});
 }

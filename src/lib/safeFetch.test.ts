@@ -104,5 +104,8 @@ describe('withGuardedFetch', () => {
 			'https://example.com/feed',
 			expect.objectContaining({ method: 'HEAD', redirect: 'manual' })
 		);
+
+		const init = fetchMock.mock.calls[0][1] as RequestInit;
+		expect(new Headers(init.headers).get('accept')).toBe('application/rss+xml');
 	});
 });
