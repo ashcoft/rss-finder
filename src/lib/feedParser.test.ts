@@ -520,4 +520,151 @@ describe('parseFeedXml', () => {
 			'https://example.com/first.png'
 		);
 	});
+	it('keeps a quoted src that contains a greater-than sign', () => {
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <description><![CDATA[<img src="https://example.com/photo.jpg?label=a>b">]]></description></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0].image).toBe(
+			'https://example.com/photo.jpg?label=a>b'
+		);
+	});
+
+	it('does not read src= from entity-encoded quotes in alt text', () => {
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <description><![CDATA[<img alt="she said &quot;src=/decoy.png&quot;" src="/photo.jpg">]]></description></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0].image).toBe(
+			'https://example.com/photo.jpg'
+		);
+	});
+	it('rejects an entity-encoded data: image and uses the next one', () => {
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <description><![CDATA[<img src="&#100;ata:image/gif;base64,R0lGOD"><img src="/photo.jpg">]]></description></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0].image).toBe(
+			'https://example.com/photo.jpg'
+		);
+	});
+	it('reads an img written with numeric character references', () => {
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <description>&#60;img src=&#34;/photo.jpg&#34;&#62;</description></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0].image).toBe(
+			'https://example.com/photo.jpg'
+		);
+	});
+
+	it('reads an img whose only quoted attribute uses numeric references', () => {
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <description>&lt;img src=&#34;/photo.jpg&#34;&gt;</description></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0].image).toBe(
+			'https://example.com/photo.jpg'
+		);
+	});
+
+	it('keeps src when another attribute has an unquoted apostrophe', () => {
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <description><![CDATA[<img src="/photo.jpg" data-credit=O'Reilly>]]></description></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0].image).toBe(
+			'https://example.com/photo.jpg'
+		);
+	});
+	it('keeps query parameters in an unquoted src', () => {
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <description><![CDATA[<img src=/photo.jpg?w=800&h=600>]]></description></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0].image).toBe(
+			'https://example.com/photo.jpg?w=800&h=600'
+		);
+	});
+
+	it('prefers a real image over one inside a code example', () => {
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <description><![CDATA[<code>&lt;img src="/example.png"&gt;</code><img src="/real.png">]]></description></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0].image).toBe(
+			'https://example.com/real.png'
+		);
+	});
+
+	it('keeps a real image next to an escaped greater-than in an unquoted attribute', () => {
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <description><![CDATA[<img alt=width&gt;height src="/real.png">]]></description></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0].image).toBe(
+			'https://example.com/real.png'
+		);
+	});
+
+	it('ignores an img written inside quoted alt text', () => {
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <description><![CDATA[<img alt="<img src='/decoy.jpg'>" data-src="/lazy.jpg"><img src="/real.jpg">]]></description></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0].image).toBe(
+			'https://example.com/real.jpg'
+		);
+	});
+
+	it('keeps the full URL when an unquoted src contains an escaped greater-than', () => {
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <description><![CDATA[<img src=/photo.jpg?label=a&gt;b>]]></description></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0].image).toBe(
+			'https://example.com/photo.jpg?label=a%3Eb'
+		);
+	});
+
+	it('rejects a data: URI hidden behind an encoded tab', () => {
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <description><![CDATA[<img src="d&#9;ata:image/gif;base64,R0lGOD">]]></description></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0]).not.toHaveProperty('image');
+	});
+
+	it('does not decode an XML image URL twice', () => {
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <enclosure url="https://example.com/photo.jpg?label=&amp;lt;" type="image/jpeg"/></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0].image).toBe(
+			'https://example.com/photo.jpg?label=&lt;'
+		);
+	});
+
+	it('discards an img whose quoted src never closes', () => {
+		const long = 'a'.repeat(5000);
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <description><![CDATA[<img src="/broken.jpg?${long}>]]></description></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0]).not.toHaveProperty('image');
+	});
 });

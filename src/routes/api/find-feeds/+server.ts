@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { find } from 'feedfinder-ts';
 import { normalizeUrl } from '#lib/utils.js';
+import { assertFetchableUrl, BlockedUrlError } from '#lib/urlGuard.js';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ request }) => {
@@ -21,6 +22,15 @@ export const POST: RequestHandler = async ({ request }) => {
 		normalizedUrl = normalizeUrl(url);
 	} catch (error) {
 		return json({ error: (error as Error).message }, { status: 400 });
+	}
+
+	try {
+		assertFetchableUrl(normalizedUrl);
+	} catch (error) {
+		if (error instanceof BlockedUrlError) {
+			return json({ error: error.message }, { status: 400 });
+		}
+		return json({ error: 'Invalid URL format' }, { status: 400 });
 	}
 
 	try {

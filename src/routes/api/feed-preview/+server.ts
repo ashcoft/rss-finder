@@ -1,27 +1,53 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { parseFeedXml } from '#lib/feedParser.js';
+import { assertFetchableUrl, BlockedUrlError } from '#lib/urlGuard.js';
 
 const USER_AGENT = 'rss-finder/2.0';
 const TIMEOUT_MS = 15000;
+const MAX_REDIRECTS = 5;
 
 async function fetchFeedText(url: string): Promise<{ xml: string; url: string }> {
 	const controller = new AbortController();
 	const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
 	try {
-		const response = await fetch(url, {
-			headers: {
-				Accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml, */*',
-				'User-Agent': USER_AGENT
-			},
-			signal: controller.signal,
-			redirect: 'follow'
-		});
-		if (!response.ok) {
-			throw new Error(`Failed to fetch feed (${response.status})`);
+		let current = url;
+
+		// Redirects are followed by hand so every hop goes through the host guard, and so
+		// relative item links and images resolve against the URL that served the feed.
+		for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
+			assertFetchableUrl(current);
+
+			const response = await fetch(current, {
+				headers: {
+					Accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml, */*',
+					'User-Agent': USER_AGENT
+				},
+				signal: controller.signal,
+				redirect: 'manual'
+			});
+
+			if (response.status >= 300 && response.status < 400) {
+				// Release the redirect response, or its body can hold the upstream
+				// connection open after this request finishes.
+				await response.body?.cancel();
+				const location = response.headers.get('location');
+				if (!location) {
+					throw new Error(`Failed to fetch feed (${response.status})`);
+				}
+				current = assertFetchableUrl(location, current).toString();
+				continue;
+			}
+
+			if (!response.ok) {
+				throw new Error(`Failed to fetch feed (${response.status})`);
+			}
+
+			return { xml: await response.text(), url: current };
 		}
-		// Relative item links and images resolve against the final URL after redirects.
-		return { xml: await response.text(), url: response.url || url };
+
+		throw new Error('Too many redirects');
 	} finally {
 		clearTimeout(timeout);
 	}
@@ -39,12 +65,11 @@ export const GET: RequestHandler = async ({ url }) => {
 	}
 
 	try {
-		const target = new URL(feedUrl);
-		// Limit redirect targets to supported schemes to avoid SSRF-ish redirects
-		if (!/^https?:$/.test(target.protocol)) {
-			return json({ error: 'Invalid feed URL protocol' }, { status: 400 });
+		assertFetchableUrl(feedUrl);
+	} catch (error) {
+		if (error instanceof BlockedUrlError) {
+			return json({ error: error.message }, { status: 400 });
 		}
-	} catch {
 		return json({ error: 'Invalid feed URL' }, { status: 400 });
 	}
 
@@ -53,6 +78,9 @@ export const GET: RequestHandler = async ({ url }) => {
 		const feed = parseFeedXml(xml, baseUrl);
 		return json({ feed });
 	} catch (error) {
+		if (error instanceof BlockedUrlError) {
+			return json({ error: error.message }, { status: 400 });
+		}
 		console.error('Error fetching feed preview:', error);
 		return json(
 			{ error: (error as Error).message || 'Failed to load feed preview' },
