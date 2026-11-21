@@ -551,4 +551,36 @@ describe('parseFeedXml', () => {
 			'https://example.com/photo.jpg'
 		);
 	});
+	it('reads an img written with numeric character references', () => {
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <description>&#60;img src=&#34;/photo.jpg&#34;&#62;</description></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0].image).toBe(
+			'https://example.com/photo.jpg'
+		);
+	});
+
+	it('reads an img whose only quoted attribute uses numeric references', () => {
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <description>&lt;img src=&#34;/photo.jpg&#34;&gt;</description></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0].image).toBe(
+			'https://example.com/photo.jpg'
+		);
+	});
+
+	it('keeps src when another attribute has an unquoted apostrophe', () => {
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <description><![CDATA[<img src="/photo.jpg" data-credit=O'Reilly>]]></description></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0].image).toBe(
+			'https://example.com/photo.jpg'
+		);
+	});
 });

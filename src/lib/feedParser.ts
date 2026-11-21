@@ -96,15 +96,34 @@ function resolveLink(link: string, baseUrl: string): string {
 }
 
 const IMAGE_URL_PATTERN = /\.(?:jpe?g|png|gif|webp|avif|svg)(?:[?#]|$)/i;
-// Quote-aware tag matching, so a `>` inside a quoted attribute value does not end the tag.
-const IMG_TAG_PATTERN = /<img\b(?:[^>"']|"[^"]*"|'[^']*')*>/gi;
-// Attributes are consumed whole, so `alt="… src=x"` cannot be mistaken for a src attribute.
-const ATTRIBUTE_PATTERN = /([a-z_:][-a-z0-9_:.]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>`]+))/gi;
+const IMG_OPEN_PATTERN = /<img\b/gi;
+// One attribute at a time, or the end of the tag. Consuming attributes whole keeps
+// `alt="… src=x"` from being read as a src, and the `>` alternative only fires outside a
+// quoted value, so `<img src="…?a>b">` stays intact.
+const ATTRIBUTE_PATTERN =
+	/([a-z_:][-a-z0-9_:.]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>=`]+))|\s*\/?>/gi;
+// Only the references that build markup are decoded up front; quotes stay encoded so they
+// cannot shift attribute boundaries before the src value is extracted.
+const MARKUP_ENTITY_PATTERN = /&(#x?[0-9a-f]+|lt|gt|amp);/gi;
 // Types that say nothing about the payload, so an image-looking URL still counts.
 const INCONCLUSIVE_TYPES = new Set(['', 'application/octet-stream', 'binary/octet-stream']);
 
 function isDataUrl(url: string): boolean {
 	return /^data:/i.test(url);
+}
+
+function decodeMarkupEntities(text: string): string {
+	return text.replace(MARKUP_ENTITY_PATTERN, (match, entity: string) => {
+		const name = entity.toLowerCase();
+		if (name === 'lt') return '<';
+		if (name === 'gt') return '>';
+		if (name === 'amp') return '&';
+		const code = name.startsWith('#x') ? parseInt(name.slice(2), 16) : parseInt(name.slice(1), 10);
+		if (code === 0x3c) return '<';
+		if (code === 0x3e) return '>';
+		if (code === 0x26) return '&';
+		return match;
+	});
 }
 
 function pickImageUrl(value: unknown): string {
@@ -183,22 +202,30 @@ function pickFromMedia(value: unknown): string {
 	return '';
 }
 
-function imageSrc(tag: string): string {
-	for (const match of tag.matchAll(ATTRIBUTE_PATTERN)) {
+function imageSrcAt(html: string, start: number): string {
+	ATTRIBUTE_PATTERN.lastIndex = start;
+
+	let match: RegExpExecArray | null;
+	while ((match = ATTRIBUTE_PATTERN.exec(html)) !== null) {
+		if (!match[1]) return '';
+
 		if (match[1].toLowerCase() !== 'src') continue;
-		// Decode before the scheme check, so an entity-encoded `&#100;ata:` is still rejected.
-		const src = decodeEntities(match[2] ?? match[3] ?? match[4] ?? '').trim();
+
+		// Decode before the scheme check, so an entity-encoded `&#100;ata:` is still rejected,
+		// and strip quotes that arrived as character references.
+		let src = decodeEntities(match[2] ?? match[3] ?? match[4] ?? '').trim();
+		const quoted = /^"([^"]*)"$|^'([^']*)'$/.exec(src);
+		if (quoted) src = (quoted[1] ?? quoted[2] ?? '').trim();
 		if (src && !isDataUrl(src)) return src;
 	}
+
 	return '';
 }
 
 function firstImageInHtml(value: unknown): string {
-	// Scan before entity decoding so `&quot;` inside alt text cannot break the attribute
-	// structure, then decode the URL that was found.
-	const html = rawText(value);
-	for (const match of html.matchAll(IMG_TAG_PATTERN)) {
-		const src = imageSrc(match[0]);
+	const html = decodeMarkupEntities(rawText(value));
+	for (const match of html.matchAll(IMG_OPEN_PATTERN)) {
+		const src = imageSrcAt(html, (match.index ?? 0) + match[0].length);
 		if (src) return src;
 	}
 	return '';
