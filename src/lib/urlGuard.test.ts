@@ -19,7 +19,9 @@ describe('isBlockedHost', () => {
 		'::1',
 		'fd00::1',
 		'fe80::1',
-		'::ffff:127.0.0.1'
+		'::ffff:127.0.0.1',
+		'::ffff:7f00:1',
+		'::ffff:a00:1'
 	])('blocks %s', (host) => {
 		expect(isBlockedHost(host)).toBe(true);
 	});
@@ -45,6 +47,12 @@ describe('assertFetchableUrl', () => {
 
 	it('rejects a non-http scheme', () => {
 		expect(() => assertFetchableUrl('file:///etc/passwd')).toThrow(BlockedUrlError);
+	});
+
+	it('rejects a mapped IPv6 loopback', () => {
+		expect(() => assertFetchableUrl('http://[::ffff:127.0.0.1]/')).toThrow(
+			'Feed URL host is not allowed'
+		);
 	});
 
 	it('rejects a private address', () => {

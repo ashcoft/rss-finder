@@ -109,12 +109,21 @@ function isDataUrl(url: string): boolean {
 	return /^data:/i.test(url);
 }
 
-function cleanUrl(value: string): string {
-	// URL parsers drop tabs and newlines, so do the same before the scheme check:
-	// `d&#9;ata:` must not slip past it.
-	return decodeEntities(value)
-		.replace(/[\t\n\r\f]+/g, '')
-		.trim();
+// URL parsers drop tabs and newlines, so do the same before the scheme check:
+// `d&#9;ata:` must not slip past it.
+function stripControl(value: string): string {
+	return value.replace(/[\t\n\r\f]+/g, '').trim();
+}
+
+// XML attribute values are already decoded by the parser, so decoding again would turn a
+// literal `&amp;lt;` into `<`.
+function cleanMetadataUrl(value: string): string {
+	return stripControl(value);
+}
+
+// Inline HTML is scanned before decoding, so its attribute values still hold references.
+function cleanHtmlUrl(value: string): string {
+	return stripControl(decodeEntities(value));
 }
 
 function decodeMarkupEntities(text: string): string {
@@ -133,7 +142,7 @@ function decodeMarkupEntities(text: string): string {
 
 function pickImageUrl(value: unknown): string {
 	if (typeof value === 'string') {
-		const url = cleanUrl(value);
+		const url = cleanMetadataUrl(value);
 		return isDataUrl(url) ? '' : url;
 	}
 
@@ -153,7 +162,7 @@ function pickImageUrl(value: unknown): string {
 		for (const key of ['@_url', '@_href', '@_src']) {
 			const candidate = obj[key];
 			if (typeof candidate !== 'string') continue;
-			const url = cleanUrl(candidate);
+			const url = cleanMetadataUrl(candidate);
 			if (url && !isDataUrl(url)) return url;
 		}
 	}
@@ -236,6 +245,10 @@ function scanImgTag(html: string, start: number): { src: string; end: number } {
 			if (quote === '"' || quote === "'") {
 				const valueStart = ++i;
 				while (i < limit && html[i] !== quote) i += 1;
+				if (i >= limit) {
+					// The value never closed inside the cap, so it is not a usable URL.
+					return { src, end: limit };
+				}
 				value = html.slice(valueStart, i);
 				i += 1;
 			} else {
@@ -247,7 +260,7 @@ function scanImgTag(html: string, start: number): { src: string; end: number } {
 
 		if (!src && name === 'src') {
 			// Quotes that arrived as character references end up inside an unquoted value.
-			const url = cleanUrl(value)
+			const url = cleanHtmlUrl(value)
 				.replace(/^"([^"]*)"$|^'([^']*)'$/, '$1$2')
 				.trim();
 			if (url && !isDataUrl(url)) src = url;

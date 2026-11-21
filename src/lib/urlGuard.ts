@@ -25,12 +25,23 @@ function isPrivateIpv4([a, b]: number[]): boolean {
 	);
 }
 
+// URL parsing rewrites `::ffff:127.0.0.1` to the hexadecimal `::ffff:7f00:1`, so both
+// spellings have to be unwrapped before the IPv4 range checks run.
+function mappedIpv4(host: string): number[] | null {
+	const dotted = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/.exec(host);
+	if (dotted) return ipv4Parts(dotted[1]);
+
+	const hex = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(host);
+	if (!hex) return null;
+
+	const high = parseInt(hex[1], 16);
+	const low = parseInt(hex[2], 16);
+	return [high >> 8, high & 0xff, low >> 8, low & 0xff];
+}
+
 function isPrivateIpv6(host: string): boolean {
-	const mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/.exec(host);
-	if (mapped) {
-		const parts = ipv4Parts(mapped[1]);
-		return !parts || isPrivateIpv4(parts);
-	}
+	const mapped = mappedIpv4(host);
+	if (mapped) return isPrivateIpv4(mapped);
 	return (
 		host === '::' ||
 		host === '::1' ||

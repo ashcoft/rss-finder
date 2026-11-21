@@ -646,4 +646,25 @@ describe('parseFeedXml', () => {
 
 		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0]).not.toHaveProperty('image');
 	});
+
+	it('does not decode an XML image URL twice', () => {
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <enclosure url="https://example.com/photo.jpg?label=&amp;lt;" type="image/jpeg"/></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0].image).toBe(
+			'https://example.com/photo.jpg?label=&lt;'
+		);
+	});
+
+	it('discards an img whose quoted src never closes', () => {
+		const long = 'a'.repeat(5000);
+		const xml = `<rss version="2.0"><channel><title>T</title>
+  <item><title>A</title><link>https://example.com/a</link>
+    <description><![CDATA[<img src="/broken.jpg?${long}>]]></description></item>
+</channel></rss>`;
+
+		expect(parseFeedXml(xml, 'https://example.com/feed.xml').items[0]).not.toHaveProperty('image');
+	});
 });

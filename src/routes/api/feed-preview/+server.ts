@@ -29,6 +29,9 @@ async function fetchFeedText(url: string): Promise<{ xml: string; url: string }>
 			});
 
 			if (response.status >= 300 && response.status < 400) {
+				// Release the redirect response, or its body can hold the upstream
+				// connection open after this request finishes.
+				await response.body?.cancel();
 				const location = response.headers.get('location');
 				if (!location) {
 					throw new Error(`Failed to fetch feed (${response.status})`);
